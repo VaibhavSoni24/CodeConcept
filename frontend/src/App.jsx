@@ -13,7 +13,7 @@ import ExecutionTracePanel from "./components/ExecutionTracePanel";
 import FlowGraphPanel from "./components/FlowGraphPanel";
 import SkillRadarChart from "./components/SkillRadarChart";
 import RefactoringPanel from "./components/RefactoringPanel";
-import { runCode, submitCode, traceCode } from "./api";
+import { runCode, submitCode, traceCode, getProfile } from "./api";
 
 const STARTER_CODE = `# Try submitting code with a conceptual mistake!
 # Examples:
@@ -73,9 +73,21 @@ function App() {
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("diagnosis");
+  const [loadedProfile, setLoadedProfile] = useState({ profiles: [], skillScores: [] });
 
-  const profiles = useMemo(() => feedback?.profile || [], [feedback]);
-  const skillScores = useMemo(() => feedback?.skill_scores || [], [feedback]);
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      getProfile(user.id).then((data) => {
+        setLoadedProfile({
+          profiles: data.profiles || [],
+          skillScores: data.skill_scores || [],
+        });
+      }).catch(console.error);
+    }
+  }, [isAuthenticated, user?.id]);
+
+  const profiles = useMemo(() => feedback?.profile || loadedProfile.profiles, [feedback, loadedProfile.profiles]);
+  const skillScores = useMemo(() => feedback?.skill_scores || loadedProfile.skillScores, [feedback, loadedProfile.skillScores]);
 
   const handleRun = useCallback(async () => {
     setLoading("run");
