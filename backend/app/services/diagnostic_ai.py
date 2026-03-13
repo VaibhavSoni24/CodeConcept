@@ -116,6 +116,12 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, ref
         if result:
             if "refactoring_suggestions" not in result:
                 result["refactoring_suggestions"] = refactoring
+            elif not isinstance(result["refactoring_suggestions"], list):
+                # Ensure it's a list even if AI returned a string
+                if isinstance(result["refactoring_suggestions"], str):
+                    result["refactoring_suggestions"] = [result["refactoring_suggestions"]]
+                else:
+                    result["refactoring_suggestions"] = refactoring
             return result
         else:
             logger.warning("Could not parse JSON from OpenAI response, using fallback.")

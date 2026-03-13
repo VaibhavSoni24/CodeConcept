@@ -234,6 +234,13 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
     update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
     db.commit()
 
+    # Ensure refactoring_suggestions is a list
+    ref_sugg = diagnostic.get("refactoring_suggestions", [])
+    if isinstance(ref_sugg, str):
+        ref_sugg = [ref_sugg]
+    elif not isinstance(ref_sugg, list):
+        ref_sugg = []
+
     # --- Build unified response ---
     return {
         "analysis": {
@@ -248,7 +255,7 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
         "hint_level_3": diagnostic.get("hint_3", issues[0].get("hint_3")),
         "explanation": diagnostic.get("explanation", issues[0].get("explanation")),
         "practice": diagnostic.get("practice", issues[0].get("practice")),
-        "refactoring_suggestions": diagnostic.get("refactoring_suggestions", []),
+        "refactoring_suggestions": ref_sugg,
 
         # New analysis data
         "misconceptions": misconceptions,
