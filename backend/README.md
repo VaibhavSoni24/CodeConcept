@@ -32,4 +32,4 @@ curl -X POST http://localhost:8000/submit-code -H "Content-Type: application/jso
 ## Notes
 
 - `DATABASE_URL` defaults to SQLite for quick setup. Use PostgreSQL by setting `DATABASE_URL`.
-- Optional LLM diagnostics enabled with `OPENAI_API_KEY`.
+- Optional LLM diagnostics enabled with `INCEPTION_API_KEY`.

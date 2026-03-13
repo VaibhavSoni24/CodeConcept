@@ -6,9 +6,12 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from dotenv import load_dotenv
 from .database import Base, engine, get_db
 from .models import User, Submission, ConceptError
 from .schemas.payloads import SubmitCodeRequest, RunCodeRequest, CreateUserRequest, UserOut
+
+load_dotenv()
 
 # Existing services
 from .services.static_analyzer import run_static_analysis
