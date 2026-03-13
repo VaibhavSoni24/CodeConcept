@@ -48,5 +48,105 @@
     "hint_3": "Replace range(len(items)) with for item in items when index is unused.",
     "explanation": "Direct iteration is more readable and less error-prone than manual indexing.",
     "practice": "Rewrite two index-based loops into direct element loops."
+  },
+  "off_by_one_range": {
+    "concept": "Array indexing",
+    "mistake_type": "Logical reasoning gap",
+    "difficulty": "medium",
+    "hint_1": "How many elements does your list actually have?",
+    "hint_2": "range(len(arr)) already covers index 0 to len-1.",
+    "hint_3": "Remove the +1 from range(len(arr)+1) to avoid IndexError.",
+    "explanation": "range(len(arr)+1) accesses one index beyond the list, causing an IndexError.",
+    "practice": "Print every element of a 5-item list using correct range bounds."
+  },
+  "mutable_default_arg": {
+    "concept": "Mutable defaults",
+    "mistake_type": "Concept misunderstanding",
+    "difficulty": "intermediate",
+    "hint_1": "What happens when your function is called multiple times?",
+    "hint_2": "Default arguments are evaluated once when the function is defined.",
+    "hint_3": "Use None as the default and create the list/dict inside the function body.",
+    "explanation": "Mutable default arguments are shared across all function calls, leading to unexpected behavior.",
+    "practice": "Write a function that appends to a list safely using None as default."
+  },
+  "float_equality": {
+    "concept": "Float comparison",
+    "mistake_type": "Concept misunderstanding",
+    "difficulty": "intermediate",
+    "hint_1": "Are floating-point numbers stored exactly in computers?",
+    "hint_2": "0.1 + 0.2 does not equal 0.3 in floating point.",
+    "hint_3": "Use abs(a - b) < epsilon or math.isclose() for float comparisons.",
+    "explanation": "Floating-point arithmetic has precision limits, making == comparisons unreliable.",
+    "practice": "Write a function that checks if two floats are approximately equal."
+  },
+  "bare_except": {
+    "concept": "Exception handling",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "What types of exceptions does your except clause catch?",
+    "hint_2": "A bare except catches everything, including KeyboardInterrupt and SystemExit.",
+    "hint_3": "Use except Exception: or a specific exception type instead.",
+    "explanation": "Bare except clauses hide bugs and prevent clean program termination.",
+    "practice": "Rewrite a try/except block to catch only ValueError and TypeError."
+  },
+  "modify_while_iterating": {
+    "concept": "Iteration mutation",
+    "mistake_type": "Logical reasoning gap",
+    "difficulty": "intermediate",
+    "hint_1": "Are you changing the collection you are looping over?",
+    "hint_2": "Modifying a list during iteration can skip elements or cause errors.",
+    "hint_3": "Iterate over a copy of the list, or build a new list instead.",
+    "explanation": "Modifying a collection while iterating over it leads to unpredictable behavior.",
+    "practice": "Filter a list by creating a new list instead of removing items in-place."
+  },
+  "string_concat_loop": {
+    "concept": "String performance",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "How does Python handle string concatenation internally?",
+    "hint_2": "Each += creates a new string object, copying all previous characters.",
+    "hint_3": "Collect strings in a list and use ''.join() at the end.",
+    "explanation": "String concatenation in a loop is O(n²) because strings are immutable.",
+    "practice": "Build a sentence from a list of words using join() instead of +=."
+  },
+  "is_vs_equals": {
+    "concept": "Identity vs equality",
+    "mistake_type": "Operator confusion",
+    "difficulty": "intermediate",
+    "hint_1": "What is the difference between 'is' and '=='?",
+    "hint_2": "'is' checks if two variables point to the same object in memory.",
+    "hint_3": "Use '==' for value comparison. Reserve 'is' for None, True, False.",
+    "explanation": "'is' tests identity (same object), '==' tests equality (same value).",
+    "practice": "Write examples showing when 'is' and '==' give different results."
+  },
+  "global_mutation": {
+    "concept": "Scope rules",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "intermediate",
+    "hint_1": "Where is the variable you're modifying defined?",
+    "hint_2": "Using 'global' creates hidden dependencies between functions.",
+    "hint_3": "Pass values as parameters and return results instead of using global.",
+    "explanation": "Global variable mutation makes code harder to debug and reason about.",
+    "practice": "Refactor a function that uses global state to use parameters and return values."
+  },
+  "shadow_builtin": {
+    "concept": "Name shadowing",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "Is your variable name the same as a Python built-in?",
+    "hint_2": "Overwriting built-ins like list, dict, or str breaks their functionality.",
+    "hint_3": "Choose descriptive names like 'my_list' or 'items' instead.",
+    "explanation": "Shadowing built-in names prevents using those functions later in your code.",
+    "practice": "Rename variables that shadow list, dict, str, type, or id."
+  },
+  "type_vs_isinstance": {
+    "concept": "Type checking",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "How are you checking the type of a value?",
+    "hint_2": "type() does not account for inheritance.",
+    "hint_3": "Use isinstance(obj, ClassName) for proper type checking.",
+    "explanation": "isinstance() works with subclasses; type() checks the exact class only.",
+    "practice": "Write a function that uses isinstance() to handle int, float, and str inputs."
   }
 }

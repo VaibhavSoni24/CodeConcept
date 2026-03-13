@@ -32,4 +32,9 @@ export async function getProfile(userId) {
   return res.data;
 }
 
+export async function traceCode(code) {
+  const res = await api.post("/trace", { code });
+  return res.data;
+}
+
 export default api;

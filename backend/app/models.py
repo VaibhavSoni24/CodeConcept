@@ -54,3 +54,17 @@ class LearningProfile(Base):
     last_seen = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="profiles")
+
+
+class ConceptSkill(Base):
+    __tablename__ = "concept_skills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    concept = Column(String(120), nullable=False)
+    correct_usage = Column(Integer, default=0)
+    total_usage = Column(Integer, default=0)
+    score = Column(Integer, default=0)  # stored as int 0-100 for simplicity
+    last_updated = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

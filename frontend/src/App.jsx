@@ -4,13 +4,21 @@ import OutputPanel from "./components/OutputPanel";
 import FeedbackPanel from "./components/FeedbackPanel";
 import HintsPanel from "./components/HintsPanel";
 import LearningProgress from "./components/LearningProgress";
-import { runCode, submitCode, createUser } from "./api";
+import TabBar from "./components/TabBar";
+import CodeSmellsPanel from "./components/CodeSmellsPanel";
+import ComplexityPanel from "./components/ComplexityPanel";
+import ConceptsDetectedPanel from "./components/ConceptsDetectedPanel";
+import ExecutionTracePanel from "./components/ExecutionTracePanel";
+import FlowGraphPanel from "./components/FlowGraphPanel";
+import SkillRadarChart from "./components/SkillRadarChart";
+import RefactoringPanel from "./components/RefactoringPanel";
+import { runCode, submitCode, createUser, traceCode } from "./api";
 
 const STARTER_CODE = `# Try submitting code with a conceptual mistake!
-# Examples to try:
-#   - A while True loop with no break
-#   - A recursive function with no base case
-#   - Using == instead of = for assignment
+# Examples:
+#   - while True without break
+#   - def f(x=[]): mutable default
+#   - range(len(arr)+1): off-by-one
 
 def count_down(n):
     while n > 0:
@@ -18,6 +26,13 @@ def count_down(n):
         n -= 1
 
 count_down(5)`;
+
+const TABS = [
+  { id: "diagnosis", label: "Diagnosis", icon: "⚡" },
+  { id: "quality", label: "Code Quality", icon: "🔥" },
+  { id: "trace", label: "Trace & Flow", icon: "🔍" },
+  { id: "progress", label: "Progress", icon: "📊" },
+];
 
 function App() {
   const [userId, setUserId] = useState(1);
@@ -29,13 +44,13 @@ function App() {
     exit_code: null,
   });
   const [feedback, setFeedback] = useState(null);
+  const [executionTrace, setExecutionTrace] = useState(null);
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("diagnosis");
 
-  const profiles = useMemo(() => {
-    if (!feedback?.profile) return [];
-    return feedback.profile;
-  }, [feedback]);
+  const profiles = useMemo(() => feedback?.profile || [], [feedback]);
+  const skillScores = useMemo(() => feedback?.skill_scores || [], [feedback]);
 
   const handleCreateUser = useCallback(async () => {
     setLoading("create");
@@ -49,7 +64,6 @@ function App() {
       setUserId(user.id);
       setUserCreated(true);
     } catch (err) {
-      // If user already exists, just mark as created
       if (err.response?.status === 400 || err.response?.status === 409) {
         setUserCreated(true);
       } else {
@@ -69,9 +83,7 @@ function App() {
     } catch (err) {
       setRunOutput({
         stdout: "",
-        stderr:
-          err.response?.data?.detail ||
-          "Run failed. Is the backend running?",
+        stderr: err.response?.data?.detail || "Run failed. Is the backend running?",
         exit_code: -1,
       });
     } finally {
@@ -83,19 +95,19 @@ function App() {
     setLoading("analyze");
     setError("");
     try {
-      const result = await submitCode(Number(userId), code);
+      // Run analysis + trace in parallel
+      const [result, traceResult] = await Promise.all([
+        submitCode(Number(userId), code),
+        traceCode(code),
+      ]);
       setFeedback(result);
+      setExecutionTrace(traceResult.trace);
     } catch (err) {
       if (err.response?.status === 404) {
-        setError(
-          "User not found. Click 'Create Learner' to set up a profile first."
-        );
+        setError("User not found. Click 'Create Learner' to set up a profile first.");
         setUserCreated(false);
       } else {
-        setError(
-          err.response?.data?.detail ||
-            "Analysis failed. Is the backend running?"
-        );
+        setError(err.response?.data?.detail || "Analysis failed. Is the backend running?");
       }
     } finally {
       setLoading("");
@@ -109,9 +121,8 @@ function App() {
         <div className="hero-badge">AI-Powered Learning Engine</div>
         <h1>CodeConcept</h1>
         <p>
-          Detects conceptual mistakes in your code, explains the
-          misunderstanding, and guides you with progressive hints — not just
-          answers.
+          Deep code reasoning, behavioral analysis, and learning analytics —
+          not just debugging.
         </p>
       </header>
 
@@ -138,7 +149,6 @@ function App() {
         <section>
           <CodeEditor code={code} onChange={setCode} />
 
-          {/* Action Bar */}
           <div className="actions">
             <label>
               User ID
@@ -157,38 +167,24 @@ function App() {
                 disabled={!!loading}
               >
                 {loading === "create" ? (
-                  <>
-                    <span className="spinner" /> Creating…
-                  </>
+                  <><span className="spinner" /> Creating…</>
                 ) : (
                   "✦ Create Learner"
                 )}
               </button>
             )}
 
-            <button
-              className="btn btn-run"
-              onClick={handleRun}
-              disabled={!!loading}
-            >
+            <button className="btn btn-run" onClick={handleRun} disabled={!!loading}>
               {loading === "run" ? (
-                <>
-                  <span className="spinner" /> Running…
-                </>
+                <><span className="spinner" /> Running…</>
               ) : (
                 "▶ Run"
               )}
             </button>
 
-            <button
-              className="btn btn-analyze"
-              onClick={handleAnalyze}
-              disabled={!!loading}
-            >
+            <button className="btn btn-analyze" onClick={handleAnalyze} disabled={!!loading}>
               {loading === "analyze" ? (
-                <>
-                  <span className="spinner" /> Analyzing…
-                </>
+                <><span className="spinner" /> Analyzing…</>
               ) : (
                 "🔍 Analyze"
               )}
@@ -198,11 +194,43 @@ function App() {
           <OutputPanel output={runOutput} />
         </section>
 
-        {/* ---- Right Column ---- */}
+        {/* ---- Right Column with Tabs ---- */}
         <aside className="right-column">
-          <FeedbackPanel feedback={feedback} />
-          <HintsPanel feedback={feedback} />
-          <LearningProgress profiles={profiles} />
+          <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
+
+          {/* Tab: Diagnosis */}
+          {activeTab === "diagnosis" && (
+            <div className="tab-content slide-down">
+              <FeedbackPanel feedback={feedback} />
+              <HintsPanel feedback={feedback} />
+              <RefactoringPanel suggestions={feedback?.refactoring_suggestions} />
+            </div>
+          )}
+
+          {/* Tab: Code Quality */}
+          {activeTab === "quality" && (
+            <div className="tab-content slide-down">
+              <CodeSmellsPanel smells={feedback?.code_smells} />
+              <ComplexityPanel complexity={feedback?.complexity} />
+              <ConceptsDetectedPanel concepts={feedback?.concepts_detected} />
+            </div>
+          )}
+
+          {/* Tab: Trace & Flow */}
+          {activeTab === "trace" && (
+            <div className="tab-content slide-down">
+              <ExecutionTracePanel trace={executionTrace} />
+              <FlowGraphPanel flowGraph={feedback?.flow_graph} />
+            </div>
+          )}
+
+          {/* Tab: Progress */}
+          {activeTab === "progress" && (
+            <div className="tab-content slide-down">
+              <SkillRadarChart skillScores={skillScores} />
+              <LearningProgress profiles={profiles} />
+            </div>
+          )}
         </aside>
       </main>
     </div>
