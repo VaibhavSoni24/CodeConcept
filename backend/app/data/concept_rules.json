@@ -1,0 +1,52 @@
+{
+  "missing_colon": {
+    "concept": "Python syntax structure",
+    "mistake_type": "Syntax misunderstanding",
+    "difficulty": "beginner",
+    "hint_1": "Look at the end of your control statement line.",
+    "hint_2": "Python requires a specific character before the block starts.",
+    "hint_3": "Add a colon : after for, while, if, def, or class lines.",
+    "explanation": "Python uses a colon to mark the start of an indented block.",
+    "practice": "Write three loops and three if statements with proper colons and indentation."
+  },
+  "possible_infinite_loop": {
+    "concept": "Loop termination condition",
+    "mistake_type": "Logical reasoning gap",
+    "difficulty": "beginner",
+    "hint_1": "When does your while loop stop?",
+    "hint_2": "What variable changes during each iteration?",
+    "hint_3": "Add a condition update or a break path so the loop can end.",
+    "explanation": "A loop must eventually evaluate to false or break; otherwise it runs forever.",
+    "practice": "Write a while loop that prints 1 to 5 and ends naturally."
+  },
+  "recursion_no_base_case": {
+    "concept": "Recursion fundamentals",
+    "mistake_type": "Concept misunderstanding",
+    "difficulty": "intermediate",
+    "hint_1": "Every recursive function needs a stopping condition.",
+    "hint_2": "Which input should return directly without another recursive call?",
+    "hint_3": "Add an if statement that returns a final value for the smallest case.",
+    "explanation": "Without a base case, recursion continues until stack overflow.",
+    "practice": "Implement factorial with explicit base case for n == 0."
+  },
+  "compare_instead_of_assign": {
+    "concept": "Assignment vs comparison",
+    "mistake_type": "Operator confusion",
+    "difficulty": "beginner",
+    "hint_1": "Check whether you are trying to store a value or compare two values.",
+    "hint_2": "A standalone comparison usually does not change program state.",
+    "hint_3": "Use = for assignment and == for equality checks in conditions.",
+    "explanation": "Assignment updates a variable, comparison evaluates to True/False.",
+    "practice": "Write five lines mixing assignment and if-comparisons correctly."
+  },
+  "inefficient_index_loop": {
+    "concept": "Pythonic iteration",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "Can you iterate over values directly instead of indexes?",
+    "hint_2": "Python for-loops work naturally with elements.",
+    "hint_3": "Replace range(len(items)) with for item in items when index is unused.",
+    "explanation": "Direct iteration is more readable and less error-prone than manual indexing.",
+    "practice": "Rewrite two index-based loops into direct element loops."
+  }
+}
