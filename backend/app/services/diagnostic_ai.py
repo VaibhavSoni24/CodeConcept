@@ -4,8 +4,8 @@ import os
 import json
 import logging
 import re
+import requests
 from typing import Dict, Any, List
-from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def generate_diagnostic_with_ai(
     code_smells: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """Generate LLM-based diagnostic, falling back to rules if no API key."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("INCEPTION_API_KEY", "sk_e63438e4b9d465e41f5454ed81b7198a")
 
     # Always generate refactoring suggestions (rule-based)
     refactoring = _generate_refactoring_suggestions(
@@ -76,13 +76,18 @@ def generate_diagnostic_with_ai(
     )
 
     if not api_key:
-        logger.info("No OPENAI_API_KEY set — using rule-based fallback.")
+        logger.info("No INCEPTION_API_KEY set — using rule-based fallback.")
         result = _fallback_diagnostic(mapped_issue)
         result["refactoring_suggestions"] = refactoring
         return result
 
     prompt = f"""
-You are an educational coding tutor. Diagnose the conceptual misunderstanding, do not reveal full solution.
+You are an educational coding tutor. Diagnose the conceptual misunderstanding, if any. Do not reveal full solution.
+If the code is perfectly fine and there are no conceptual misunderstandings or logical errors:
+- Set mistake_type to "none"
+- Set concept_missed to "Basic implementation"
+- Provide an explanation praising the logic or code.
+- Provide suggestions for advanced variations or optimizations in hints.
 
 Input:
 student_code:
@@ -96,21 +101,62 @@ ast_analysis:
 
 student_history:
 {payload.get('student_history', {})}
-
-Output JSON keys only:
-concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, refactoring_suggestions
 """
 
+    response_schema = {
+        "name": "Diagnostic",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "concept_missed": {"type": "string"},
+                "mistake_type": {"type": "string"},
+                "explanation": {"type": "string"},
+                "hint_1": {"type": "string"},
+                "hint_2": {"type": "string"},
+                "hint_3": {"type": "string"},
+                "practice": {"type": "string"},
+                "refactoring_suggestions": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            },
+            "required": [
+                "concept_missed", "mistake_type", "explanation",
+                "hint_1", "hint_2", "hint_3", "practice", "refactoring_suggestions"
+            ]
+        }
+    }
+
+    url = "https://api.inceptionlabs.ai/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    
+    data = {
+        "model": "mercury-2",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": response_schema
+        },
+        "stream": False,
+    }
+
     try:
-        logger.info("Sending request to OpenAI API…")
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        text = response.choices[0].message.content.strip()
-        logger.info("Received response from OpenAI API (%d chars).", len(text))
+        logger.info("Sending request to Inception AI API…")
+        response = requests.post(url, headers=headers, data=json.dumps(data), timeout=25)
+        response.raise_for_status()
+        
+        res_json = response.json()
+        text = res_json["choices"][0]["message"]["content"].strip()
+        logger.info("Received response from Inception AI API (%d chars).", len(text))
 
         result = _extract_json(text)
         if result:
@@ -124,9 +170,9 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, ref
                     result["refactoring_suggestions"] = refactoring
             return result
         else:
-            logger.warning("Could not parse JSON from OpenAI response, using fallback.")
+            logger.warning("Could not parse JSON from Inception AI response, using fallback.")
     except Exception as exc:
-        logger.exception("OpenAI API call failed: %s", exc)
+        logger.exception("Inception AI API call failed: %s", exc)
 
     result = _fallback_diagnostic(mapped_issue)
     result["refactoring_suggestions"] = refactoring
