@@ -10,8 +10,10 @@ from typing import Any, Dict, List
 # The tracer script is written to a temp file and run in a subprocess.
 # It uses sys.settrace to capture line events and variable snapshots.
 TRACER_SCRIPT_TEMPLATE = r'''
-import sys
-import json
+import sys as _sys
+import json as _json
+import io as _io
+import contextlib as _contextlib
 
 _trace_log = []
 _max_steps = 50
@@ -27,37 +29,40 @@ def _safe_repr(val):
         if isinstance(val, (list, tuple)):
             return [_safe_repr(v) for v in val[:10]]
         if isinstance(val, dict):
-            return {{k: _safe_repr(v) for k, v in list(val.items())[:10]}}
+            return {k: _safe_repr(v) for k, v in list(val.items())[:10]}
         return repr(val)[:80]
     except Exception:
         return "<unrepresentable>"
 
 def _tracer(frame, event, arg):
     if len(_trace_log) >= _max_steps:
-        sys.settrace(None)
+        _sys.settrace(None)
         return None
     if event == "line" and frame.f_code.co_filename == "<string>":
-        variables = {{}}
+        variables = {}
         for k, v in frame.f_locals.items():
-            if not k.startswith("_"):
+            if not k.startswith("_") and k != "student_code":
                 variables[k] = _safe_repr(v)
-        _trace_log.append({{
+        _trace_log.append({
             "line": frame.f_lineno,
             "variables": variables,
-        }})
+        })
     return _tracer
 
 student_code = {student_code_json}
+_stdout = _io.StringIO()
+_stderr = _io.StringIO()
 
-sys.settrace(_tracer)
+_sys.settrace(_tracer)
 try:
-    exec(compile(student_code, "<string>", "exec"))
-except Exception as exc:
-    _trace_log.append({{"line": -1, "variables": {{"__error__": str(exc)[:200]}}}})
+    with _contextlib.redirect_stdout(_stdout), _contextlib.redirect_stderr(_stderr):
+        exec(compile(student_code, "<string>", "exec"))
+except BaseException as exc:
+    _trace_log.append({"line": -1, "variables": {"__error__": f"{type(exc).__name__}: {str(exc)[:200]}"}})
 finally:
-    sys.settrace(None)
+    _sys.settrace(None)
 
-print(json.dumps(_trace_log))
+print(_json.dumps(_trace_log))
 '''
 
 
@@ -81,13 +86,27 @@ def run_execution_trace(code: str) -> List[Dict[str, Any]]:
             timeout=3,
             check=False,
         )
-        if result.returncode == 0 and result.stdout.strip():
+        output = result.stdout.strip()
+
+        if result.returncode == 0 and output:
             try:
-                return json.loads(result.stdout.strip())
+                return json.loads(output)
             except json.JSONDecodeError:
+                # Recover if any extra output sneaks in before/after the JSON array.
+                left = output.find("[")
+                right = output.rfind("]")
+                if left != -1 and right != -1 and right > left:
+                    try:
+                        return json.loads(output[left : right + 1])
+                    except json.JSONDecodeError:
+                        pass
                 return [{"line": -1, "variables": {"__error__": "Trace output parse error"}}]
         else:
-            error_msg = result.stderr.strip()[:200] if result.stderr else "Unknown error"
+            if result.stderr:
+                lines = [line.strip() for line in result.stderr.splitlines() if line.strip()]
+                error_msg = lines[-1][:200] if lines else "Unknown error"
+            else:
+                error_msg = "Unknown error"
             return [{"line": -1, "variables": {"__error__": error_msg}}]
 
     except subprocess.TimeoutExpired:
