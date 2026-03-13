@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import CodeEditor from "./components/CodeEditor";
 import OutputPanel from "./components/OutputPanel";
 import FeedbackPanel from "./components/FeedbackPanel";
@@ -12,7 +12,15 @@ import ExecutionTracePanel from "./components/ExecutionTracePanel";
 import FlowGraphPanel from "./components/FlowGraphPanel";
 import SkillRadarChart from "./components/SkillRadarChart";
 import RefactoringPanel from "./components/RefactoringPanel";
-import { runCode, submitCode, createUser, traceCode } from "./api";
+import {
+  runCode,
+  submitCode,
+  traceCode,
+  loginUser,
+  registerUser,
+  logoutUser,
+  getStoredAuth,
+} from "./api";
 
 const STARTER_CODE = `# Try submitting code with a conceptual mistake!
 # Examples:
@@ -35,8 +43,18 @@ const TABS = [
 ];
 
 function App() {
-  const [userId, setUserId] = useState(1);
-  const [userCreated, setUserCreated] = useState(false);
+  // Auth state
+  const [authUser, setAuthUser] = useState(() => getStoredAuth());
+  const [authMode, setAuthMode] = useState("login"); // "login" | "register"
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // App state
   const [code, setCode] = useState(STARTER_CODE);
   const [runOutput, setRunOutput] = useState({
     stdout: "",
@@ -49,31 +67,52 @@ function App() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("diagnosis");
 
+  const userId = authUser?.user_id;
   const profiles = useMemo(() => feedback?.profile || [], [feedback]);
   const skillScores = useMemo(() => feedback?.skill_scores || [], [feedback]);
 
-  const handleCreateUser = useCallback(async () => {
-    setLoading("create");
-    setError("");
-    try {
-      const user = await createUser(
-        `Student ${Date.now()}`,
-        `student${Date.now()}@codeconcept.dev`,
-        "beginner"
-      );
-      setUserId(user.id);
-      setUserCreated(true);
-    } catch (err) {
-      if (err.response?.status === 400 || err.response?.status === 409) {
-        setUserCreated(true);
-      } else {
-        setError("Could not create user. Is the backend running on port 8000?");
+  // --- Auth handlers ---
+  const handleAuth = useCallback(
+    async (e) => {
+      e.preventDefault();
+      setAuthLoading(true);
+      setAuthError("");
+      try {
+        let data;
+        if (authMode === "register") {
+          data = await registerUser(
+            authForm.name,
+            authForm.email,
+            authForm.password
+          );
+        } else {
+          data = await loginUser(authForm.email, authForm.password);
+        }
+        setAuthUser({
+          user_id: data.user_id,
+          name: data.name,
+          email: data.email,
+        });
+      } catch (err) {
+        const msg =
+          err.response?.data?.detail ||
+          "Authentication failed. Is the backend running on port 8000?";
+        setAuthError(msg);
+      } finally {
+        setAuthLoading(false);
       }
-    } finally {
-      setLoading("");
-    }
+    },
+    [authMode, authForm]
+  );
+
+  const handleLogout = useCallback(() => {
+    logoutUser();
+    setAuthUser(null);
+    setFeedback(null);
+    setExecutionTrace(null);
   }, []);
 
+  // --- App handlers ---
   const handleRun = useCallback(async () => {
     setLoading("run");
     setError("");
@@ -83,7 +122,8 @@ function App() {
     } catch (err) {
       setRunOutput({
         stdout: "",
-        stderr: err.response?.data?.detail || "Run failed. Is the backend running?",
+        stderr:
+          err.response?.data?.detail || "Run failed. Is the backend running?",
         exit_code: -1,
       });
     } finally {
@@ -92,10 +132,10 @@ function App() {
   }, [code]);
 
   const handleAnalyze = useCallback(async () => {
+    if (!userId) return;
     setLoading("analyze");
     setError("");
     try {
-      // Run analysis + trace in parallel
       const [result, traceResult] = await Promise.all([
         submitCode(Number(userId), code),
         traceCode(code),
@@ -104,16 +144,123 @@ function App() {
       setExecutionTrace(traceResult.trace);
     } catch (err) {
       if (err.response?.status === 404) {
-        setError("User not found. Click 'Create Learner' to set up a profile first.");
-        setUserCreated(false);
+        setError("User not found. Please log in again.");
       } else {
-        setError(err.response?.data?.detail || "Analysis failed. Is the backend running?");
+        setError(
+          err.response?.data?.detail ||
+            "Analysis failed. Is the backend running?"
+        );
       }
     } finally {
       setLoading("");
     }
   }, [userId, code]);
 
+  // --- Auth screen ---
+  if (!authUser) {
+    return (
+      <div className="app-shell">
+        <header className="hero">
+          <div className="hero-badge">AI-Powered Learning Engine</div>
+          <h1>CodeConcept</h1>
+          <p>
+            Deep code reasoning, behavioral analysis, and learning analytics —
+            not just debugging.
+          </p>
+        </header>
+
+        <div className="auth-container">
+          <div className="card card-glow auth-card">
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${authMode === "login" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                Login
+              </button>
+              <button
+                className={`auth-tab ${authMode === "register" ? "active" : ""}`}
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthError("");
+                }}
+              >
+                Register
+              </button>
+            </div>
+
+            {authError && <div className="auth-error">⚠ {authError}</div>}
+
+            <form onSubmit={handleAuth} className="auth-form">
+              {authMode === "register" && (
+                <label className="auth-label">
+                  Name
+                  <input
+                    type="text"
+                    className="auth-input"
+                    value={authForm.name}
+                    onChange={(e) =>
+                      setAuthForm({ ...authForm, name: e.target.value })
+                    }
+                    required
+                    minLength={2}
+                    placeholder="Your name"
+                  />
+                </label>
+              )}
+              <label className="auth-label">
+                Email
+                <input
+                  type="email"
+                  className="auth-input"
+                  value={authForm.email}
+                  onChange={(e) =>
+                    setAuthForm({ ...authForm, email: e.target.value })
+                  }
+                  required
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label className="auth-label">
+                Password
+                <input
+                  type="password"
+                  className="auth-input"
+                  value={authForm.password}
+                  onChange={(e) =>
+                    setAuthForm({ ...authForm, password: e.target.value })
+                  }
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                />
+              </label>
+              <button
+                type="submit"
+                className="btn btn-analyze auth-submit"
+                disabled={authLoading}
+              >
+                {authLoading ? (
+                  <>
+                    <span className="spinner" /> Please wait…
+                  </>
+                ) : authMode === "login" ? (
+                  "🔑 Login"
+                ) : (
+                  "✦ Create Account"
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Main app (authenticated) ---
   return (
     <div className="app-shell">
       {/* ===== Hero Header ===== */}
@@ -124,6 +271,14 @@ function App() {
           Deep code reasoning, behavioral analysis, and learning analytics —
           not just debugging.
         </p>
+        <div className="auth-bar">
+          <span className="auth-user-info">
+            👤 {authUser.name} ({authUser.email})
+          </span>
+          <button className="btn btn-logout" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* ===== Error Banner ===== */}
@@ -150,41 +305,29 @@ function App() {
           <CodeEditor code={code} onChange={setCode} />
 
           <div className="actions">
-            <label>
-              User ID
-              <input
-                type="number"
-                min="1"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-              />
-            </label>
-
-            {!userCreated && (
-              <button
-                className="btn btn-create-user"
-                onClick={handleCreateUser}
-                disabled={!!loading}
-              >
-                {loading === "create" ? (
-                  <><span className="spinner" /> Creating…</>
-                ) : (
-                  "✦ Create Learner"
-                )}
-              </button>
-            )}
-
-            <button className="btn btn-run" onClick={handleRun} disabled={!!loading}>
+            <button
+              className="btn btn-run"
+              onClick={handleRun}
+              disabled={!!loading}
+            >
               {loading === "run" ? (
-                <><span className="spinner" /> Running…</>
+                <>
+                  <span className="spinner" /> Running…
+                </>
               ) : (
                 "▶ Run"
               )}
             </button>
 
-            <button className="btn btn-analyze" onClick={handleAnalyze} disabled={!!loading}>
+            <button
+              className="btn btn-analyze"
+              onClick={handleAnalyze}
+              disabled={!!loading}
+            >
               {loading === "analyze" ? (
-                <><span className="spinner" /> Analyzing…</>
+                <>
+                  <span className="spinner" /> Analyzing…
+                </>
               ) : (
                 "🔍 Analyze"
               )}
@@ -203,7 +346,9 @@ function App() {
             <div className="tab-content slide-down">
               <FeedbackPanel feedback={feedback} />
               <HintsPanel feedback={feedback} />
-              <RefactoringPanel suggestions={feedback?.refactoring_suggestions} />
+              <RefactoringPanel
+                suggestions={feedback?.refactoring_suggestions}
+              />
             </div>
           )}
 

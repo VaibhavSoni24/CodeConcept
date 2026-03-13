@@ -29,6 +29,11 @@ def _count_statements(body: list) -> int:
     return count
 
 
+def _body_signature(body: list) -> str:
+    """Create a structural signature for a function body (for duplicate detection)."""
+    return ast.dump(ast.Module(body=body, type_ignores=[]))
+
+
 def detect_code_smells(code: str) -> List[Dict[str, Any]]:
     """Analyze code for common code smells."""
     try:
@@ -44,7 +49,7 @@ def detect_code_smells(code: str) -> List[Dict[str, Any]]:
             stmt_count = _count_statements(node.body)
             if stmt_count > 20:
                 smells.append({
-                    "type": "Large Function",
+                    "type": "Long Function",
                     "severity": "medium",
                     "message": f"Function '{node.name}' has {stmt_count} statements (recommended: ≤20).",
                     "line": node.lineno,
@@ -107,4 +112,50 @@ def detect_code_smells(code: str) -> List[Dict[str, Any]]:
                 "line": 0,
             })
 
+    # 6. Excessive Loops (> 3 loops in a single function or module-level)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            loop_count = sum(
+                1 for child in ast.walk(node)
+                if isinstance(child, (ast.For, ast.While))
+            )
+            if loop_count > 3:
+                smells.append({
+                    "type": "Excessive Loops",
+                    "severity": "medium",
+                    "message": f"Function '{node.name}' contains {loop_count} loops (recommended: ≤3).",
+                    "line": node.lineno,
+                })
+
+    # Module-level loop count
+    top_level_loops = sum(
+        1 for child in ast.iter_child_nodes(tree)
+        if isinstance(child, (ast.For, ast.While))
+    )
+    if top_level_loops > 3:
+        smells.append({
+            "type": "Excessive Loops",
+            "severity": "medium",
+            "message": f"Module top-level has {top_level_loops} loops (recommended: ≤3).",
+            "line": 1,
+        })
+
+    # 7. Duplicate Logic — detect functions with nearly identical AST structure
+    func_sigs: Dict[str, List[tuple]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and len(node.body) >= 3:
+            sig = _body_signature(node.body)
+            func_sigs.setdefault(sig, []).append((node.name, node.lineno))
+
+    for sig, funcs in func_sigs.items():
+        if len(funcs) > 1:
+            names = ", ".join(f"'{n}'" for n, _ in funcs)
+            smells.append({
+                "type": "Duplicate Logic",
+                "severity": "medium",
+                "message": f"Functions {names} have identical structure — consider merging.",
+                "line": funcs[0][1],
+            })
+
     return smells
+

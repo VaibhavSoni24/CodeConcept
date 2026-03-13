@@ -2,13 +2,22 @@ import os
 import sys
 import tempfile
 import subprocess
+import logging
 from typing import Dict, Any, List
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env BEFORE any os.getenv() calls
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from .models import User, Submission, ConceptError
-from .schemas.payloads import SubmitCodeRequest, RunCodeRequest, CreateUserRequest, UserOut
+from .schemas.payloads import (
+    SubmitCodeRequest, RunCodeRequest, CreateUserRequest, UserOut,
+    RegisterRequest, LoginRequest, TokenOut,
+)
+from .services.auth_service import hash_password, verify_password, create_token
 
 # Existing services
 from .services.static_analyzer import run_static_analysis
@@ -87,6 +96,35 @@ def map_analysis_to_issues(analysis: Dict[str, Any], misconceptions: List[Dict[s
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# --- Auth endpoints ---
+
+@app.post("/auth/register", response_model=TokenOut)
+def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered.")
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        level=payload.level,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = create_token(user.id, user.email)
+    return TokenOut(access_token=token, user_id=user.id, name=user.name, email=user.email)
+
+
+@app.post("/auth/login", response_model=TokenOut)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    token = create_token(user.id, user.email)
+    return TokenOut(access_token=token, user_id=user.id, name=user.name, email=user.email)
 
 
 @app.post("/users", response_model=UserOut)

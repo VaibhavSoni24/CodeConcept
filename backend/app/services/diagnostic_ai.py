@@ -2,8 +2,12 @@
 
 import os
 import json
+import logging
+import re
 from typing import Dict, Any, List
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 def _fallback_diagnostic(mapped_issue: Dict[str, Any]) -> Dict[str, Any]:
@@ -37,12 +41,25 @@ def _generate_refactoring_suggestions(code: str, smells: List[Dict[str, Any]]) -
             suggestions.append(f"Remove unused variable: {smell.get('message', '')}.")
         elif stype == "Duplicate String Literal":
             suggestions.append("Extract repeated string literals into named constants.")
+        elif stype == "Excessive Loops":
+            suggestions.append("Consider combining loops or extracting loop logic into helper functions.")
 
     if not suggestions:
         suggestions.append("Consider adding docstrings to your functions.")
         suggestions.append("Review variable names for clarity and descriptiveness.")
 
     return suggestions[:5]
+
+
+def _extract_json(text: str) -> dict | None:
+    """Extract JSON from text that may be wrapped in markdown code fences."""
+    # Strip markdown code fences like ```json ... ```
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", text.strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned.strip())
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
 
 
 def generate_diagnostic_with_ai(
@@ -59,6 +76,7 @@ def generate_diagnostic_with_ai(
     )
 
     if not api_key:
+        logger.info("No OPENAI_API_KEY set — using rule-based fallback.")
         result = _fallback_diagnostic(mapped_issue)
         result["refactoring_suggestions"] = refactoring
         return result
@@ -84,21 +102,27 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, ref
 """
 
     try:
+        logger.info("Sending request to OpenAI API…")
         client = OpenAI(api_key=api_key)
-        response = client.responses.create(
+        response = client.chat.completions.create(
             model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
-            input=prompt,
+            messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
         )
-        text = response.output_text.strip()
-        if text.startswith("{"):
-            result = json.loads(text)
+        text = response.choices[0].message.content.strip()
+        logger.info("Received response from OpenAI API (%d chars).", len(text))
+
+        result = _extract_json(text)
+        if result:
             if "refactoring_suggestions" not in result:
                 result["refactoring_suggestions"] = refactoring
             return result
-    except Exception:
-        pass
+        else:
+            logger.warning("Could not parse JSON from OpenAI response, using fallback.")
+    except Exception as exc:
+        logger.exception("OpenAI API call failed: %s", exc)
 
     result = _fallback_diagnostic(mapped_issue)
     result["refactoring_suggestions"] = refactoring
     return result
+

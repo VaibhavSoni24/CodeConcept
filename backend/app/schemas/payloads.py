@@ -27,3 +27,25 @@ class UserOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Authentication Schemas ---
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=2)
+    email: str = Field(..., min_length=5)
+    password: str = Field(..., min_length=6)
+    level: str = "beginner"
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=5)
+    password: str = Field(..., min_length=1)
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    name: str
+    email: str

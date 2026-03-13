@@ -1,4 +1,9 @@
 import ast
+import json
+import subprocess
+import sys
+import tempfile
+import os
 from typing import Dict, Any, List
 
 
@@ -65,6 +70,61 @@ class ConceptVisitor(ast.NodeVisitor):
             )
 
 
+def _run_pylint(code: str) -> List[Dict[str, Any]]:
+    """Run pylint on code in a temp file and return parsed messages."""
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as tmp:
+            tmp.write(code)
+            tmp_path = tmp.name
+
+        result = subprocess.run(
+            [sys.executable, "-m", "pylint", "--output-format=json", "--disable=C,R", tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.stdout.strip():
+            messages = json.loads(result.stdout.strip())
+            return [
+                {
+                    "type": m.get("type", ""),
+                    "symbol": m.get("symbol", ""),
+                    "message": m.get("message", ""),
+                    "line": m.get("line", 0),
+                }
+                for m in messages[:10]
+            ]
+    except Exception:
+        pass
+    finally:
+        try:
+            os.remove(tmp_path)
+        except (OSError, UnboundLocalError):
+            pass
+    return []
+
+
+def _run_radon(code: str) -> Dict[str, Any]:
+    """Compute cyclomatic complexity via radon."""
+    try:
+        from radon.complexity import cc_visit
+
+        results = cc_visit(code)
+        blocks = []
+        for block in results:
+            blocks.append({
+                "name": block.name,
+                "type": block.letter,
+                "complexity": block.complexity,
+                "line": block.lineno,
+            })
+        avg = sum(b["complexity"] for b in blocks) / max(len(blocks), 1)
+        return {"blocks": blocks, "average_complexity": round(avg, 2)}
+    except Exception:
+        return {"blocks": [], "average_complexity": 0}
+
+
 def run_static_analysis(code: str) -> Dict[str, Any]:
     analysis: Dict[str, Any] = {
         "syntax": "ok",
@@ -88,6 +148,6 @@ def run_static_analysis(code: str) -> Dict[str, Any]:
     visitor = ConceptVisitor()
     visitor.visit(tree)
     analysis["ast_flags"] = visitor.flags
-    analysis["pylint"] = []
-    analysis["radon"] = {"complexity": "not_computed_in_mvp"}
+    analysis["pylint"] = _run_pylint(code)
+    analysis["radon"] = _run_radon(code)
     return analysis
