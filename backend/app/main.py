@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from .database import Base, engine, get_db
 from .models import User, Submission, ConceptError
 from .schemas.payloads import SubmitCodeRequest, RunCodeRequest, CreateUserRequest, UserOut
+from .auth_routes import router as auth_router
+from .services.auth_service import get_current_user
 
 load_dotenv()
 
@@ -39,11 +41,13 @@ app = FastAPI(title="CodeConcept MVP", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 
 def map_analysis_to_issues(analysis: Dict[str, Any], misconceptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -102,14 +106,14 @@ def create_user(payload: CreateUserRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/profiles/{user_id}")
-def profile(user_id: int, db: Session = Depends(get_db)):
+def profile(user_id: int, db: Session = Depends(get_db), _current_user: User = Depends(get_current_user)):
     summary = get_profile_summary(db, user_id)
     skill_scores = get_skill_scores(db, user_id)
     return {"user_id": user_id, "profiles": summary, "skill_scores": skill_scores}
 
 
 @app.post("/run-code")
-def run_code(payload: RunCodeRequest):
+def run_code(payload: RunCodeRequest, _current_user: User = Depends(get_current_user)):
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as tmp:
         tmp.write(payload.code)
         tmp_path = tmp.name
@@ -137,14 +141,14 @@ def run_code(payload: RunCodeRequest):
 
 
 @app.post("/trace")
-def trace_code(payload: RunCodeRequest):
+def trace_code(payload: RunCodeRequest, _current_user: User = Depends(get_current_user)):
     """Return step-by-step execution trace for the given code."""
     trace = run_execution_trace(payload.code)
     return {"trace": trace}
 
 
 @app.post("/submit-code")
-def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
+def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _current_user: User = Depends(get_current_user)):
     if payload.language.lower() != "python":
         raise HTTPException(status_code=400, detail="MVP supports Python only.")
 

@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import AuthPage from "./components/AuthPage";
 import CodeEditor from "./components/CodeEditor";
 import OutputPanel from "./components/OutputPanel";
 import FeedbackPanel from "./components/FeedbackPanel";
@@ -12,7 +13,7 @@ import ExecutionTracePanel from "./components/ExecutionTracePanel";
 import FlowGraphPanel from "./components/FlowGraphPanel";
 import SkillRadarChart from "./components/SkillRadarChart";
 import RefactoringPanel from "./components/RefactoringPanel";
-import { runCode, submitCode, createUser, traceCode } from "./api";
+import { runCode, submitCode, traceCode } from "./api";
 
 const STARTER_CODE = `# Try submitting code with a conceptual mistake!
 # Examples:
@@ -35,8 +36,32 @@ const TABS = [
 ];
 
 function App() {
-  const [userId, setUserId] = useState(1);
-  const [userCreated, setUserCreated] = useState(false);
+  // ─── Auth state ───
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem("cc_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => localStorage.getItem("cc_token"));
+
+  const isAuthenticated = !!(user && token);
+
+  const handleAuth = useCallback((userData, accessToken) => {
+    setUser(userData);
+    setToken(accessToken);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("cc_token");
+    localStorage.removeItem("cc_user");
+    setUser(null);
+    setToken(null);
+  }, []);
+
+  // ─── App state ───
   const [code, setCode] = useState(STARTER_CODE);
   const [runOutput, setRunOutput] = useState({
     stdout: "",
@@ -52,28 +77,6 @@ function App() {
   const profiles = useMemo(() => feedback?.profile || [], [feedback]);
   const skillScores = useMemo(() => feedback?.skill_scores || [], [feedback]);
 
-  const handleCreateUser = useCallback(async () => {
-    setLoading("create");
-    setError("");
-    try {
-      const user = await createUser(
-        `Student ${Date.now()}`,
-        `student${Date.now()}@codeconcept.dev`,
-        "beginner"
-      );
-      setUserId(user.id);
-      setUserCreated(true);
-    } catch (err) {
-      if (err.response?.status === 400 || err.response?.status === 409) {
-        setUserCreated(true);
-      } else {
-        setError("Could not create user. Is the backend running on port 8000?");
-      }
-    } finally {
-      setLoading("");
-    }
-  }, []);
-
   const handleRun = useCallback(async () => {
     setLoading("run");
     setError("");
@@ -81,6 +84,10 @@ function App() {
       const result = await runCode(code);
       setRunOutput(result);
     } catch (err) {
+      if (err.response?.status === 401) {
+        handleLogout();
+        return;
+      }
       setRunOutput({
         stdout: "",
         stderr: err.response?.data?.detail || "Run failed. Is the backend running?",
@@ -89,30 +96,33 @@ function App() {
     } finally {
       setLoading("");
     }
-  }, [code]);
+  }, [code, handleLogout]);
 
   const handleAnalyze = useCallback(async () => {
     setLoading("analyze");
     setError("");
     try {
-      // Run analysis + trace in parallel
       const [result, traceResult] = await Promise.all([
-        submitCode(Number(userId), code),
+        submitCode(Number(user.id), code),
         traceCode(code),
       ]);
       setFeedback(result);
       setExecutionTrace(traceResult.trace);
     } catch (err) {
-      if (err.response?.status === 404) {
-        setError("User not found. Click 'Create Learner' to set up a profile first.");
-        setUserCreated(false);
-      } else {
-        setError(err.response?.data?.detail || "Analysis failed. Is the backend running?");
+      if (err.response?.status === 401) {
+        handleLogout();
+        return;
       }
+      setError(err.response?.data?.detail || "Analysis failed. Is the backend running?");
     } finally {
       setLoading("");
     }
-  }, [userId, code]);
+  }, [user, code, handleLogout]);
+
+  // ─── Gate: show Auth page if not logged in ───
+  if (!isAuthenticated) {
+    return <AuthPage onAuth={handleAuth} />;
+  }
 
   return (
     <div className="app-shell">
@@ -124,6 +134,15 @@ function App() {
           Deep code reasoning, behavioral analysis, and learning analytics —
           not just debugging.
         </p>
+        {/* User bar */}
+        <div className="user-bar">
+          <span className="user-greeting">
+            👋 {user.name}
+          </span>
+          <button className="btn btn-logout" onClick={handleLogout}>
+            Sign Out
+          </button>
+        </div>
       </header>
 
       {/* ===== Error Banner ===== */}
@@ -150,30 +169,6 @@ function App() {
           <CodeEditor code={code} onChange={setCode} />
 
           <div className="actions">
-            <label>
-              User ID
-              <input
-                type="number"
-                min="1"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-              />
-            </label>
-
-            {!userCreated && (
-              <button
-                className="btn btn-create-user"
-                onClick={handleCreateUser}
-                disabled={!!loading}
-              >
-                {loading === "create" ? (
-                  <><span className="spinner" /> Creating…</>
-                ) : (
-                  "✦ Create Learner"
-                )}
-              </button>
-            )}
-
             <button className="btn btn-run" onClick={handleRun} disabled={!!loading}>
               {loading === "run" ? (
                 <><span className="spinner" /> Running…</>

@@ -9,7 +9,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    email = Column(String(120), nullable=True, unique=True)
+    email = Column(String(120), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=True)
     level = Column(String(50), default="beginner")
     created_at = Column(DateTime, default=datetime.utcnow)
 

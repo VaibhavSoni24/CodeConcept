@@ -8,6 +8,44 @@ const api = axios.create({
   timeout: 15000,
 });
 
+// Attach JWT token to every request if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("cc_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, clear stored auth so UI falls back to login
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem("cc_token");
+      localStorage.removeItem("cc_user");
+    }
+    return Promise.reject(err);
+  }
+);
+
+// ---------- Auth ----------
+export async function registerUser(name, email, password, level = "beginner") {
+  const res = await api.post("/auth/register", { name, email, password, level });
+  return res.data;
+}
+
+export async function loginUser(email, password) {
+  const res = await api.post("/auth/login", { email, password });
+  return res.data;
+}
+
+export async function getMe() {
+  const res = await api.get("/auth/me");
+  return res.data;
+}
+
+// ---------- Existing ----------
 export async function runCode(code) {
   const res = await api.post("/run-code", { code });
   return res.data;
