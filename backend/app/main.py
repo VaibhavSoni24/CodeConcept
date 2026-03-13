@@ -207,6 +207,12 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
     }
     diagnostic = generate_diagnostic_with_ai(ai_context, issues[0], code_smells)
 
+    # Reflect the AI's final verdict onto the primary issue 
+    issues[0]["concept"] = diagnostic.get("concept_missed", issues[0].get("concept", "General Python fundamentals"))
+    issues[0]["mistake_type"] = diagnostic.get("mistake_type", issues[0].get("mistake_type", "unknown"))
+    if issues[0]["mistake_type"] == "none":
+        issues[0]["difficulty"] = "none"
+
     # Persist submission
     submission = Submission(
         user_id=payload.user_id,
@@ -230,8 +236,16 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
 
     # Update profiles
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
+    has_errors = any(i.get("mistake_type") != "none" for i in issues)
+    
+    # If the submission has ANY errors, mark all detected AST concepts as errors for skill scoring
+    # so they don't get "correct_usage" points.
+    scoring_error_concepts = list(error_concepts)
+    if has_errors:
+        scoring_error_concepts.extend([c.lower() for c in concepts_detected])
+
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"], concepts_detected)
-    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
+    update_skill_scores(db, payload.user_id, concepts_detected, scoring_error_concepts)
     db.commit()
 
     # Ensure refactoring_suggestions is a list

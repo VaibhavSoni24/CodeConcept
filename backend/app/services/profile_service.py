@@ -38,6 +38,10 @@ def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, An
             profile.mastery_level = _mastery_from_mistakes(profile.mistake_count)
             profile.last_seen = datetime.utcnow()
 
+    # If there are any actual issues in the code, do not grant positive progress on any concept detected.
+    if issues:
+        error_concepts.update(concepts_detected)
+
     for concept in concepts_detected:
         if concept not in error_concepts:
             profile = (
@@ -80,8 +84,9 @@ def update_skill_scores(
 ):
     """Update concept skill scores. Concepts without errors get correct_usage++."""
     error_set = set(error_concepts)
+    all_concepts = set(concepts_detected) | error_set  # Union of all observed concepts
 
-    for concept in concepts_detected:
+    for concept in all_concepts:
         skill = (
             db.query(ConceptSkill)
             .filter(ConceptSkill.user_id == user_id, ConceptSkill.concept == concept)

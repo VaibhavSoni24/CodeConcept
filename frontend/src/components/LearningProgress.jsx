@@ -1,5 +1,5 @@
-function LearningProgress({ profiles }) {
-  if (!profiles || profiles.length === 0) {
+function LearningProgress({ skillScores }) {
+  if (!skillScores || skillScores.length === 0) {
     return (
       <div className="card card-glow">
         <div className="card-header">
@@ -15,43 +15,22 @@ function LearningProgress({ profiles }) {
     );
   }
 
-  const getStatusClass = (level) => {
-    switch (level) {
-      case "struggling":
-        return "status-struggling";
-      case "beginner":
-        return "status-beginner";
-      case "improving":
-        return "status-improving";
-      default:
-        return "status-beginner";
-    }
+  const getStatusClass = (score) => {
+    if (score >= 80) return "status-improving";
+    if (score >= 40) return "status-beginner";
+    return "status-struggling";
   };
 
-  const getFillClass = (level) => {
-    switch (level) {
-      case "struggling":
-        return "fill-struggling";
-      case "beginner":
-        return "fill-beginner";
-      case "improving":
-        return "fill-improving";
-      default:
-        return "fill-beginner";
-    }
+  const getFillClass = (score) => {
+    if (score >= 80) return "fill-improving";
+    if (score >= 40) return "fill-beginner";
+    return "fill-struggling";
   };
 
-  const getBarWidth = (level, count) => {
-    switch (level) {
-      case "struggling":
-        return Math.min(30 + count * 5, 95);
-      case "beginner":
-        return Math.min(45 + count * 3, 80);
-      case "improving":
-        return Math.max(10, 30 - count * 3);
-      default:
-        return 50;
-    }
+  const getMasteryLabel = (score) => {
+    if (score >= 80) return "Mastering";
+    if (score >= 40) return "Beginner";
+    return "Struggling";
   };
 
   return (
@@ -62,34 +41,37 @@ function LearningProgress({ profiles }) {
           Learning Progress
         </h2>
         <span className="chip chip-exit">
-          {profiles.length} concepts
+          {skillScores.length} concepts
         </span>
       </div>
 
       <div className="progress-list">
-        {profiles.map((item) => (
-          <div key={item.concept} className="progress-item">
-            <div className="progress-meta">
-              <span className="progress-concept">{item.concept}</span>
-              <span
-                className={`progress-status ${getStatusClass(item.mastery_level)}`}
-              >
-                {item.mastery_level}
+        {skillScores.map((item) => {
+          const mistakes = item.total_usage - item.correct_usage;
+          return (
+            <div key={item.concept} className="progress-item">
+              <div className="progress-meta">
+                <span className="progress-concept">{item.concept.replace(/_/g, ' ')}</span>
+                <span
+                  className={`progress-status ${getStatusClass(item.score)}`}
+                >
+                  {getMasteryLabel(item.score)} ({item.score}%)
+                </span>
+              </div>
+              <div className="progress-bar-track">
+                <div
+                  className={`progress-bar-fill ${getFillClass(item.score)}`}
+                  style={{
+                    width: `${Math.max(5, item.score)}%`,
+                  }}
+                />
+              </div>
+              <span className="progress-detail">
+                {item.correct_usage} correct / {item.total_usage} uses ({mistakes} mistake{mistakes !== 1 ? "s" : ""})
               </span>
             </div>
-            <div className="progress-bar-track">
-              <div
-                className={`progress-bar-fill ${getFillClass(item.mastery_level)}`}
-                style={{
-                  width: `${getBarWidth(item.mastery_level, item.mistake_count)}%`,
-                }}
-              />
-            </div>
-            <span className="progress-detail">
-              {item.mistake_count} mistake{item.mistake_count !== 1 ? "s" : ""} recorded
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

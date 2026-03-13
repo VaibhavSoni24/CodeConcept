@@ -373,7 +373,7 @@ function App() {
           {activeTab === "progress" && (
             <div className="tab-content slide-down">
               <SkillRadarChart skillScores={skillScores} />
-              <LearningProgress profiles={profiles} />
+              <LearningProgress skillScores={skillScores} />
             </div>
           )}
         </aside>
