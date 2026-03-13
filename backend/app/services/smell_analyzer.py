@@ -1,11 +1,14 @@
-"""Code Smell Analyzer — detects poor coding practices via AST inspection."""
+"""Code Smell Analyzer — detects poor coding practices via AST, pylint, and radon."""
 
 import ast
+import json
+import os
+import subprocess
+import sys
+import tempfile
 from typing import Any, Dict, List
 
-
 def _max_nesting_depth(node: ast.AST, current: int = 0) -> int:
-    """Recursively compute the maximum nesting depth of loops and conditionals."""
     max_depth = current
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.For, ast.While, ast.If, ast.With)):
@@ -16,95 +19,134 @@ def _max_nesting_depth(node: ast.AST, current: int = 0) -> int:
             max_depth = max(max_depth, depth)
     return max_depth
 
-
-def _count_statements(body: list) -> int:
-    """Count total statements recursively."""
-    count = 0
-    for node in body:
-        count += 1
-        if hasattr(node, "body"):
-            count += _count_statements(node.body)
-        if hasattr(node, "orelse") and node.orelse:
-            count += _count_statements(node.orelse)
-    return count
-
-
 def detect_code_smells(code: str) -> List[Dict[str, Any]]:
-    """Analyze code for common code smells."""
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        return []
-
+    """Analyze code for common code smells using ast, pylint, and radon."""
     smells: List[Dict[str, Any]] = []
 
-    for node in ast.walk(tree):
-        # 1. Large functions (> 20 statements)
-        if isinstance(node, ast.FunctionDef):
-            stmt_count = _count_statements(node.body)
-            if stmt_count > 20:
-                smells.append({
-                    "type": "Large Function",
-                    "severity": "medium",
-                    "message": f"Function '{node.name}' has {stmt_count} statements (recommended: ≤20).",
-                    "line": node.lineno,
-                })
+    # 1. AST-based analysis
+    try:
+        tree = ast.parse(code)
 
-            # 3. Long parameter list (> 4)
-            total_params = len(node.args.args) + len(node.args.kwonlyargs)
-            if total_params > 4:
-                smells.append({
-                    "type": "Long Parameter List",
-                    "severity": "medium",
-                    "message": f"Function '{node.name}' has {total_params} parameters (recommended: ≤4).",
-                    "line": node.lineno,
-                })
-
-    # 2. Deep nesting (> 3 levels)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            depth = _max_nesting_depth(node)
-            if depth > 3:
-                smells.append({
-                    "type": "Deep Nesting",
-                    "severity": "high",
-                    "message": f"Function '{node.name}' has nesting depth {depth} (recommended: ≤3).",
-                    "line": node.lineno,
-                })
-
-    # 4. Unused variables (simple heuristic: assigned but never loaded)
-    assigned: Dict[str, int] = {}
-    loaded: set = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
-            if isinstance(node.ctx, ast.Store):
-                if node.id not in assigned:
-                    assigned[node.id] = node.lineno
-            elif isinstance(node.ctx, ast.Load):
-                loaded.add(node.id)
-
-    for name, line in assigned.items():
-        if name not in loaded and not name.startswith("_"):
-            smells.append({
-                "type": "Unused Variable",
-                "severity": "low",
-                "message": f"Variable '{name}' is assigned but never used.",
-                "line": line,
+        # Deep nesting & Excessive loops via AST
+        loop_count = 0
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                depth = _max_nesting_depth(node)
+                if depth > 3:
+                    smells.append({
+                        "type": "Deep Nesting",
+                        "severity": "high",
+                        "message": f"Function '{node.name}' has nesting depth {depth} (recommended: ≤3).",
+                        "line": node.lineno,
+                    })
+            if isinstance(node, (ast.For, ast.While)):
+                loop_count += 1
+                
+        if loop_count > 3:
+             smells.append({
+                "type": "Excessive Loops",
+                "severity": "medium",
+                "message": f"Found {loop_count} loops in the code. Consider refactoring to reduce iteration.",
+                "line": 1,
             })
 
-    # 5. Duplicate string literals (same string > 3 times)
-    string_counts: Dict[str, int] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > 3:
-            string_counts[node.value] = string_counts.get(node.value, 0) + 1
+    except SyntaxError:
+        return smells
 
-    for literal, count in string_counts.items():
-        if count > 3:
-            smells.append({
-                "type": "Duplicate String Literal",
-                "severity": "low",
-                "message": f"String \"{literal[:30]}{'…' if len(literal) > 30 else ''}\" appears {count} times. Consider using a constant.",
-                "line": 0,
-            })
+    # Write code to temp file for pylint and radon
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as tmp:
+        tmp.write(code)
+        tmp_path = tmp.name
 
-    return smells
+    try:
+        # 2. Pylint analysis
+        pylint_cmd = [
+            sys.executable, "-m", "pylint",
+            "--output-format=json",
+            "--disable=all",
+            "--enable=unused-variable,duplicate-code,too-many-branches,too-many-nested-blocks,too-many-locals,too-many-statements,too-many-arguments",
+            tmp_path
+        ]
+        result = subprocess.run(pylint_cmd, capture_output=True, text=True)
+        if result.stdout.strip():
+            try:
+                pylint_data = json.loads(result.stdout)
+                for issue in pylint_data:
+                    symbol = issue.get("symbol", "")
+                    if symbol == "unused-variable":
+                        smells.append({
+                            "type": "Unused Variable",
+                            "severity": "low",
+                            "message": issue.get("message", "Unused variable detected."),
+                            "line": issue.get("line", 0)
+                        })
+                    elif symbol == "duplicate-code":
+                        smells.append({
+                            "type": "Duplicate Logic",
+                            "severity": "medium",
+                            "message": "Duplicate code blocks detected.",
+                            "line": issue.get("line", 0)
+                        })
+                    elif symbol == "too-many-arguments":
+                        smells.append({
+                            "type": "Long Function",
+                            "severity": "medium",
+                            "message": issue.get("message", "Too many arguments in function."),
+                            "line": issue.get("line", 0)
+                        })
+            except json.JSONDecodeError:
+                pass
+
+        # 3. Radon analysis
+        radon_cmd = [sys.executable, "-m", "radon", "cc", "-j", tmp_path]
+        result2 = subprocess.run(radon_cmd, capture_output=True, text=True)
+        if result2.stdout.strip():
+            try:
+                radon_data = json.loads(result2.stdout)
+                file_blocks = radon_data.get(tmp_path, [])
+                if isinstance(file_blocks, list):
+                    for block in file_blocks:
+                        if block.get("type") == "function":
+                            complexity = block.get("complexity", 1)
+                            if complexity > 5:
+                                smells.append({
+                                    "type": "Deep Nesting",
+                                    "severity": "high" if complexity > 10 else "medium",
+                                    "message": f"Function '{block.get('name')}' has high cyclomatic complexity ({complexity}).",
+                                    "line": block.get("lineno", 0)
+                                })
+            except json.JSONDecodeError:
+                pass
+
+        radon_raw_cmd = [sys.executable, "-m", "radon", "raw", "-j", tmp_path]
+        result3 = subprocess.run(radon_raw_cmd, capture_output=True, text=True)
+        if result3.stdout.strip():
+            try:
+                radon_raw = json.loads(result3.stdout)
+                stats = radon_raw.get(tmp_path, {})
+                loc = stats.get("loc", 0)
+                if loc > 20:
+                    smells.append({
+                        "type": "Long Function",
+                        "severity": "medium",
+                        "message": f"Code length is {loc} lines. Consider breaking into smaller functions.",
+                        "line": 1
+                    })
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+    # Deduplicate smells based on message
+    unique_smells = []
+    seen_messages = set()
+    for s in smells:
+        if s["message"] not in seen_messages:
+            unique_smells.append(s)
+            seen_messages.add(s["message"])
+
+    return unique_smells

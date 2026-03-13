@@ -246,7 +246,10 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
 
     # Update profiles
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
-    update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
+    formatted_concepts_detected = [c.lower() for c in concepts_detected]
+    all_concepts = list(set(formatted_concepts_detected + error_concepts))
+    
+    update_learning_profile(db, payload.user_id, all_concepts, error_concepts)
     update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
     db.commit()
 

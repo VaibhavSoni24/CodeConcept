@@ -1,5 +1,12 @@
 function RefactoringPanel({ suggestions }) {
-  if (!suggestions || suggestions.length === 0) {
+  let list = [];
+  if (Array.isArray(suggestions)) {
+    list = suggestions;
+  } else if (typeof suggestions === "string") {
+    list = [suggestions];
+  }
+
+  if (list.length === 0) {
     return null;
   }
 
@@ -12,7 +19,7 @@ function RefactoringPanel({ suggestions }) {
         </h2>
       </div>
       <ol className="refactoring-list">
-        {suggestions.map((suggestion, i) => (
+        {list.map((suggestion, i) => (
           <li key={i} className="refactoring-item">
             {suggestion}
           </li>

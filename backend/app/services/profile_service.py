@@ -14,22 +14,26 @@ def _mastery_from_mistakes(mistake_count: int) -> str:
     return "improving"
 
 
-def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, Any]]):
-    for issue in issues:
-        concept = issue.get("concept", "General Python fundamentals")
+def update_learning_profile(db: Session, user_id: int, all_concepts: List[str], error_concepts: List[str]):
+    for concept in all_concepts:
         profile = (
             db.query(LearningProfile)
             .filter(LearningProfile.user_id == user_id, LearningProfile.concept == concept)
             .first()
         )
+        is_error = concept in error_concepts
 
         if profile is None:
-            profile = LearningProfile(user_id=user_id, concept=concept, mistake_count=1)
+            profile = LearningProfile(user_id=user_id, concept=concept, mistake_count=1 if is_error else 0)
             profile.mastery_level = _mastery_from_mistakes(profile.mistake_count)
             profile.last_seen = datetime.utcnow()
             db.add(profile)
         else:
-            profile.mistake_count += 1
+            if is_error:
+                profile.mistake_count += 1
+            elif profile.mistake_count > 0:
+                profile.mistake_count = max(0, profile.mistake_count - 1)
+                
             profile.mastery_level = _mastery_from_mistakes(profile.mistake_count)
             profile.last_seen = datetime.utcnow()
 

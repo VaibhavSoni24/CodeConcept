@@ -108,10 +108,10 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, ref
 """
 
     try:
-        logger.info("Sending request to OpenAI API (model=%s)...", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
+        logger.info("Sending request to OpenAI API (model=%s)...", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             messages=[
                 {"role": "system", "content": "You are an expert educational coding tutor. Always respond with valid JSON only."},
                 {"role": "user", "content": prompt},

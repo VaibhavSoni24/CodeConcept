@@ -27,7 +27,7 @@ def _safe_repr(val):
         if isinstance(val, (list, tuple)):
             return [_safe_repr(v) for v in val[:10]]
         if isinstance(val, dict):
-            return {k: _safe_repr(v) for k, v in list(val.items())[:10]}
+            return {{k: _safe_repr(v) for k, v in list(val.items())[:10]}}
         return repr(val)[:80]
     except Exception:
         return "<unrepresentable>"
@@ -36,15 +36,21 @@ def _tracer(frame, event, arg):
     if len(_trace_log) >= _max_steps:
         sys.settrace(None)
         return None
+        
+    if event == "call":
+        if frame.f_code.co_filename == "<string>":
+            return _tracer
+        return None
+
     if event == "line" and frame.f_code.co_filename == "<string>":
-        variables = {}
+        variables = {{}}
         for k, v in frame.f_locals.items():
             if not k.startswith("_"):
                 variables[k] = _safe_repr(v)
-        _trace_log.append({
+        _trace_log.append({{
             "line": frame.f_lineno,
             "variables": variables,
-        })
+        }})
     return _tracer
 
 student_code = {student_code_json}
@@ -53,7 +59,7 @@ sys.settrace(_tracer)
 try:
     exec(compile(student_code, "<string>", "exec"))
 except Exception as exc:
-    _trace_log.append({"line": -1, "variables": {"__error__": str(exc)[:200]}})
+    _trace_log.append({{"line": -1, "variables": {{"__error__": str(exc)[:200]}}}})
 finally:
     sys.settrace(None)
 
@@ -63,8 +69,8 @@ print(json.dumps(_trace_log))
 
 def run_execution_trace(code: str) -> List[Dict[str, Any]]:
     """Execute code in a sandboxed subprocess and return trace data."""
-    script = TRACER_SCRIPT_TEMPLATE.replace(
-        "{student_code_json}", json.dumps(code)
+    script = TRACER_SCRIPT_TEMPLATE.format(
+        student_code_json=json.dumps(code)
     )
 
     with tempfile.NamedTemporaryFile(

@@ -36,10 +36,10 @@ const TABS = [
 
 function App() {
   // Auth state
-  const [authMode, setAuthMode] = useState("login"); // "login" | "register"
+  const [authMode, setAuthMode] = useState("login"); // "login" only
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [authName, setAuthName] = useState("");
+  const [authName, setAuthName] = useState(""); // Kept for API compat if needed, unused in UI
   const [user, setUser] = useState(null); // { id, name, token }
 
   // App state
@@ -76,12 +76,7 @@ function App() {
     setLoading("auth");
     setError("");
     try {
-      let result;
-      if (authMode === "register") {
-        result = await registerUser(authName, authEmail, authPassword);
-      } else {
-        result = await loginUser(authEmail, authPassword);
-      }
+      let result = await loginUser(authEmail, authPassword);
       const userData = { id: result.user_id, name: result.name, token: result.access_token };
       localStorage.setItem("cc_token", result.access_token);
       localStorage.setItem("cc_user", JSON.stringify(userData));
@@ -91,7 +86,7 @@ function App() {
       if (typeof detail === "string") {
         setError(detail);
       } else {
-        setError(authMode === "register" ? "Registration failed. Is the backend running?" : "Login failed. Check your credentials.");
+        setError("Login failed. Check your credentials.");
       }
     } finally {
       setLoading("");
@@ -181,20 +176,11 @@ function App() {
           <div className="card-header">
             <h2>
               <span className="card-icon amber">🔐</span>
-              {authMode === "login" ? "Login" : "Register"}
+              Login
             </h2>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "4px 0" }}>
-            {authMode === "register" && (
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={authName}
-                onChange={(e) => setAuthName(e.target.value)}
-                className="auth-input"
-              />
-            )}
             <input
               type="email"
               placeholder="Email"
@@ -218,33 +204,11 @@ function App() {
               style={{ width: "100%", marginTop: 4 }}
             >
               {loading === "auth" ? (
-                <><span className="spinner" /> {authMode === "login" ? "Logging in…" : "Registering…"}</>
+                <><span className="spinner" /> Logging in…</>
               ) : (
-                authMode === "login" ? "🔓 Login" : "✦ Register"
+                "🔓 Login"
               )}
             </button>
-
-            <p style={{ textAlign: "center", fontSize: "0.85rem", color: "#94a3b8", margin: 0 }}>
-              {authMode === "login" ? (
-                <>Don't have an account?{" "}
-                  <button
-                    className="link-btn"
-                    onClick={() => { setAuthMode("register"); setError(""); }}
-                  >
-                    Register
-                  </button>
-                </>
-              ) : (
-                <>Already have an account?{" "}
-                  <button
-                    className="link-btn"
-                    onClick={() => { setAuthMode("login"); setError(""); }}
-                  >
-                    Login
-                  </button>
-                </>
-              )}
-            </p>
           </div>
         </div>
       </div>
