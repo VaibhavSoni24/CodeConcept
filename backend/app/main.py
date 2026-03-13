@@ -1,14 +1,27 @@
 import os
 import sys
+import logging
 import tempfile
 import subprocess
 from typing import Dict, Any, List
+from dotenv import load_dotenv
+
+# Load .env BEFORE anything reads environment variables
+load_dotenv()
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import Base, engine, get_db
 from .models import User, Submission, ConceptError
-from .schemas.payloads import SubmitCodeRequest, RunCodeRequest, CreateUserRequest, UserOut
+from .schemas.payloads import (
+    SubmitCodeRequest,
+    RunCodeRequest,
+    RegisterRequest,
+    LoginRequest,
+    TokenOut,
+    UserOut,
+)
 
 # Existing services
 from .services.static_analyzer import run_static_analysis
@@ -29,10 +42,16 @@ from .services.concept_detector import detect_concepts
 from .services.execution_tracer import run_execution_trace
 from .services.flow_graph import build_flow_graph
 
+# Auth helpers
+from .services.auth import hash_password, verify_password, create_access_token, get_current_user
+
+logger = logging.getLogger("codeconcept")
+logging.basicConfig(level=logging.INFO)
+
 Base.metadata.create_all(bind=engine)
 rules = load_rules()
 
-app = FastAPI(title="CodeConcept MVP", version="0.2.0")
+app = FastAPI(title="CodeConcept MVP", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -84,19 +103,50 @@ def map_analysis_to_issues(analysis: Dict[str, Any], misconceptions: List[Dict[s
     return issues
 
 
+# ==================== AUTH ====================
+
+@app.post("/auth/register", response_model=TokenOut)
+def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    """Register a new user and return a JWT token."""
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user = User(
+        name=payload.name,
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+        level=payload.level,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token({"sub": user.id})
+    logger.info("User registered: id=%s email=%s", user.id, user.email)
+    return TokenOut(access_token=token, user_id=user.id, name=user.name)
+
+
+@app.post("/auth/login", response_model=TokenOut)
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate user and return a JWT token."""
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is None or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_access_token({"sub": user.id})
+    logger.info("User logged in: id=%s email=%s", user.id, user.email)
+    return TokenOut(access_token=token, user_id=user.id, name=user.name)
+
+
+# ==================== HEALTH ====================
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 
-@app.post("/users", response_model=UserOut)
-def create_user(payload: CreateUserRequest, db: Session = Depends(get_db)):
-    user = User(name=payload.name, email=payload.email, level=payload.level)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
+# ==================== PROFILES ====================
 
 @app.get("/profiles/{user_id}")
 def profile(user_id: int, db: Session = Depends(get_db)):
@@ -104,6 +154,8 @@ def profile(user_id: int, db: Session = Depends(get_db)):
     skill_scores = get_skill_scores(db, user_id)
     return {"user_id": user_id, "profiles": summary, "skill_scores": skill_scores}
 
+
+# ==================== CODE EXECUTION ====================
 
 @app.post("/run-code")
 def run_code(payload: RunCodeRequest):
@@ -140,6 +192,8 @@ def trace_code(payload: RunCodeRequest):
     return {"trace": trace}
 
 
+# ==================== SUBMIT & ANALYSE ====================
+
 @app.post("/submit-code")
 def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
     if payload.language.lower() != "python":
@@ -147,7 +201,7 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.id == payload.user_id).first()
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found. Create user first.")
+        raise HTTPException(status_code=404, detail="User not found. Please register or login first.")
 
     # --- Run all analyzers ---
     analysis = run_static_analysis(payload.code)

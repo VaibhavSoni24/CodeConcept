@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import CodeEditor from "./components/CodeEditor";
 import OutputPanel from "./components/OutputPanel";
 import FeedbackPanel from "./components/FeedbackPanel";
@@ -12,7 +12,7 @@ import ExecutionTracePanel from "./components/ExecutionTracePanel";
 import FlowGraphPanel from "./components/FlowGraphPanel";
 import SkillRadarChart from "./components/SkillRadarChart";
 import RefactoringPanel from "./components/RefactoringPanel";
-import { runCode, submitCode, createUser, traceCode } from "./api";
+import { runCode, submitCode, traceCode, registerUser, loginUser } from "./api";
 
 const STARTER_CODE = `# Try submitting code with a conceptual mistake!
 # Examples:
@@ -35,8 +35,14 @@ const TABS = [
 ];
 
 function App() {
-  const [userId, setUserId] = useState(1);
-  const [userCreated, setUserCreated] = useState(false);
+  // Auth state
+  const [authMode, setAuthMode] = useState("login"); // "login" | "register"
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [user, setUser] = useState(null); // { id, name, token }
+
+  // App state
   const [code, setCode] = useState(STARTER_CODE);
   const [runOutput, setRunOutput] = useState({
     stdout: "",
@@ -52,26 +58,53 @@ function App() {
   const profiles = useMemo(() => feedback?.profile || [], [feedback]);
   const skillScores = useMemo(() => feedback?.skill_scores || [], [feedback]);
 
-  const handleCreateUser = useCallback(async () => {
-    setLoading("create");
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const token = localStorage.getItem("cc_token");
+    const savedUser = localStorage.getItem("cc_user");
+    if (token && savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("cc_token");
+        localStorage.removeItem("cc_user");
+      }
+    }
+  }, []);
+
+  const handleAuth = useCallback(async () => {
+    setLoading("auth");
     setError("");
     try {
-      const user = await createUser(
-        `Student ${Date.now()}`,
-        `student${Date.now()}@codeconcept.dev`,
-        "beginner"
-      );
-      setUserId(user.id);
-      setUserCreated(true);
-    } catch (err) {
-      if (err.response?.status === 400 || err.response?.status === 409) {
-        setUserCreated(true);
+      let result;
+      if (authMode === "register") {
+        result = await registerUser(authName, authEmail, authPassword);
       } else {
-        setError("Could not create user. Is the backend running on port 8000?");
+        result = await loginUser(authEmail, authPassword);
+      }
+      const userData = { id: result.user_id, name: result.name, token: result.access_token };
+      localStorage.setItem("cc_token", result.access_token);
+      localStorage.setItem("cc_user", JSON.stringify(userData));
+      setUser(userData);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError(authMode === "register" ? "Registration failed. Is the backend running?" : "Login failed. Check your credentials.");
       }
     } finally {
       setLoading("");
     }
+  }, [authMode, authEmail, authPassword, authName]);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("cc_token");
+    localStorage.removeItem("cc_user");
+    setUser(null);
+    setFeedback(null);
+    setExecutionTrace(null);
+    setError("");
   }, []);
 
   const handleRun = useCallback(async () => {
@@ -92,28 +125,133 @@ function App() {
   }, [code]);
 
   const handleAnalyze = useCallback(async () => {
+    if (!user) {
+      setError("Please log in first.");
+      return;
+    }
     setLoading("analyze");
     setError("");
     try {
       // Run analysis + trace in parallel
       const [result, traceResult] = await Promise.all([
-        submitCode(Number(userId), code),
+        submitCode(user.id, code),
         traceCode(code),
       ]);
       setFeedback(result);
       setExecutionTrace(traceResult.trace);
     } catch (err) {
       if (err.response?.status === 404) {
-        setError("User not found. Click 'Create Learner' to set up a profile first.");
-        setUserCreated(false);
+        setError("User not found. Please log in again.");
+        handleLogout();
       } else {
         setError(err.response?.data?.detail || "Analysis failed. Is the backend running?");
       }
     } finally {
       setLoading("");
     }
-  }, [userId, code]);
+  }, [user, code, handleLogout]);
 
+  // =================== AUTH SCREEN ===================
+  if (!user) {
+    return (
+      <div className="app-shell">
+        <header className="hero">
+          <div className="hero-badge">AI-Powered Learning Engine</div>
+          <h1>CodeConcept</h1>
+          <p>Deep code reasoning, behavioral analysis, and learning analytics — not just debugging.</p>
+        </header>
+
+        {error && (
+          <div
+            className="card slide-down"
+            style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              borderColor: "rgba(239, 68, 68, 0.3)",
+              padding: "12px 16px",
+              marginBottom: "14px",
+              color: "#f87171",
+              fontSize: "0.88rem",
+            }}
+          >
+            ⚠ {error}
+          </div>
+        )}
+
+        <div className="card card-glow" style={{ maxWidth: 420, margin: "0 auto" }}>
+          <div className="card-header">
+            <h2>
+              <span className="card-icon amber">🔐</span>
+              {authMode === "login" ? "Login" : "Register"}
+            </h2>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "4px 0" }}>
+            {authMode === "register" && (
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+                className="auth-input"
+              />
+            )}
+            <input
+              type="email"
+              placeholder="Email"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              className="auth-input"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              className="auth-input"
+              onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+            />
+
+            <button
+              className="btn btn-analyze"
+              onClick={handleAuth}
+              disabled={!!loading}
+              style={{ width: "100%", marginTop: 4 }}
+            >
+              {loading === "auth" ? (
+                <><span className="spinner" /> {authMode === "login" ? "Logging in…" : "Registering…"}</>
+              ) : (
+                authMode === "login" ? "🔓 Login" : "✦ Register"
+              )}
+            </button>
+
+            <p style={{ textAlign: "center", fontSize: "0.85rem", color: "#94a3b8", margin: 0 }}>
+              {authMode === "login" ? (
+                <>Don't have an account?{" "}
+                  <button
+                    className="link-btn"
+                    onClick={() => { setAuthMode("register"); setError(""); }}
+                  >
+                    Register
+                  </button>
+                </>
+              ) : (
+                <>Already have an account?{" "}
+                  <button
+                    className="link-btn"
+                    onClick={() => { setAuthMode("login"); setError(""); }}
+                  >
+                    Login
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =================== MAIN APP ===================
   return (
     <div className="app-shell">
       {/* ===== Hero Header ===== */}
@@ -124,6 +262,10 @@ function App() {
           Deep code reasoning, behavioral analysis, and learning analytics —
           not just debugging.
         </p>
+        <div className="user-bar">
+          <span className="user-greeting">👋 {user.name}</span>
+          <button className="btn btn-logout" onClick={handleLogout}>Logout</button>
+        </div>
       </header>
 
       {/* ===== Error Banner ===== */}
@@ -150,30 +292,6 @@ function App() {
           <CodeEditor code={code} onChange={setCode} />
 
           <div className="actions">
-            <label>
-              User ID
-              <input
-                type="number"
-                min="1"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-              />
-            </label>
-
-            {!userCreated && (
-              <button
-                className="btn btn-create-user"
-                onClick={handleCreateUser}
-                disabled={!!loading}
-              >
-                {loading === "create" ? (
-                  <><span className="spinner" /> Creating…</>
-                ) : (
-                  "✦ Create Learner"
-                )}
-              </button>
-            )}
-
             <button className="btn btn-run" onClick={handleRun} disabled={!!loading}>
               {loading === "run" ? (
                 <><span className="spinner" /> Running…</>

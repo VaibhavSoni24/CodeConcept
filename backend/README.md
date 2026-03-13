@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 ```powershell
 uvicorn app.main:app --reload --port 8000
-```
+``` 
 
 3. Create a demo user.
 
