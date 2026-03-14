@@ -5,8 +5,9 @@ import Dashboard from "./pages/Dashboard";
 import EditorPage from "./pages/Editor";
 import Activity from "./pages/Activity";
 import Profile from "./pages/Profile";
+import Knowledge from "./pages/Knowledge";
 import About from "./pages/About";
-import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon } from "lucide-react";
+import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon, BookOpen } from "lucide-react";
 import { getUserSubmissions } from "./api";
 import { computeAverageConfidence, getUserRank } from "./utils/analytics";
 
@@ -34,6 +35,7 @@ function Navigation({ user, onLogout }) {
     { path: "/editor", label: "Editor", icon: <Code size={18} /> },
     { path: "/activity", label: "Activity", icon: <ActivityIcon size={18} /> },
     { path: "/profile", label: "Profile", icon: <User size={18} /> },
+    { path: "/knowledge", label: "Knowledge", icon: <BookOpen size={18} /> },
     { path: "/about", label: "About", icon: <Info size={18} /> },
   ];
 
@@ -105,6 +107,7 @@ function MainApp({ user, token, handleLogout }) {
             <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} />} />
             <Route path="/activity" element={<Activity user={user} />} />
             <Route path="/profile" element={<Profile user={user} />} />
+            <Route path="/knowledge" element={<Knowledge user={user} />} />
             <Route path="/about" element={<About />} />
           </Routes>
         </ErrorBoundary>
