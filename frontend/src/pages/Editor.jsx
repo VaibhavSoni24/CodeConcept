@@ -215,14 +215,14 @@ function EditorPage({ user, token, handleLogout }) {
         </div>
       )}
 
-      <main className="grid-layout flex-1 p-4 gap-6 min-h-[calc(100vh-4rem)]">
+      <main className="grid-layout flex-1 p-4 gap-6 h-[calc(100vh-4rem)] overflow-hidden">
         {/* ---- Left Column ---- */}
-        <section className="flex flex-col gap-4">
-          <div className="flex-1 rounded-xl overflow-hidden border border-[#333]">
+        <section className="flex flex-col gap-4 overflow-hidden h-full min-h-0">
+          <div className="flex-1 rounded-xl overflow-hidden border border-[#333] min-h-0">
             <CodeEditor code={code} onChange={setCode} language={language === "python" ? "python" : language} />
           </div>
 
-          <div className="actions flex gap-4">
+          <div className="actions flex gap-4 shrink-0">
             <button className="btn btn-run flex-1 py-3" onClick={handleRun} disabled={!!loading}>
               {loading === "run" ? (
                 <><span className="spinner" /> Running…</>
@@ -240,7 +240,7 @@ function EditorPage({ user, token, handleLogout }) {
             </button>
           </div>
 
-          <div className="h-64">
+          <div className="h-48 shrink-0">
             <OutputPanel output={runOutput} />
           </div>
         </section>
