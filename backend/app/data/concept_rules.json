@@ -148,5 +148,25 @@
     "hint_3": "Use isinstance(obj, ClassName) for proper type checking.",
     "explanation": "isinstance() works with subclasses; type() checks the exact class only.",
     "practice": "Write a function that uses isinstance() to handle int, float, and str inputs."
+  },
+  "unused_variable": {
+    "concept": "Code cleanliness",
+    "mistake_type": "Anti-pattern",
+    "difficulty": "beginner",
+    "hint_1": "Look for a variable that is assigned a value but never used.",
+    "hint_2": "If a variable is only assigned to, it's taking up memory for no reason.",
+    "hint_3": "Remove the variable assignment or prefix it with an underscore (e.g., _unused).",
+    "explanation": "An unused variable wastes memory and clutters the code, making it harder to read.",
+    "practice": "Identify and remove three unused variables from a given script."
+  },
+  "inefficient_nested_loop": {
+    "concept": "Algorithmic complexity",
+    "mistake_type": "Performance issue",
+    "difficulty": "medium",
+    "hint_1": "You have a loop inside another loop.",
+    "hint_2": "This means the inner loop runs completely for every iteration of the outer loop.",
+    "hint_3": "Is there a way to use a dictionary or set to avoid the inner loop?",
+    "explanation": "Nested loops multiply the iteration count. O(N²) time complexity can be very slow for large inputs.",
+    "practice": "Refactor a nested loop into a single loop using a hash map."
   }
 }

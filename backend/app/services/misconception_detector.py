@@ -191,6 +191,63 @@ def _post_process_checks(visitor: MisconceptionVisitor, tree: ast.AST) -> None:
                             "detail": f"'+=' in a loop may cause O(n²) if used on strings (line {child.lineno}).",
                         })
                         break
+                        
+    # Unused variables (assigned but never read)
+    for name, lineno in visitor._assigned_names.items():
+        if name not in visitor._read_names and name not in visitor.BUILTINS and not name.startswith("_"):
+            visitor.results.append({
+                "misconception_id": "unused_variable",
+                "misconception": "Unused variable",
+                "concept": "Code cleanliness",
+                "severity": "low",
+                "detail": f"Variable '{name}' is assigned but never used (line {lineno}).",
+            })
+            
+    # Inefficient nested loops
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.For, ast.While)):
+            for child in getattr(node, "body", []):
+                for subnode in ast.walk(child):
+                    if isinstance(subnode, (ast.For, ast.While)):
+                        visitor.results.append({
+                            "misconception_id": "inefficient_nested_loop",
+                            "misconception": "Inefficient nested loops",
+                            "concept": "Algorithmic complexity",
+                            "severity": "medium",
+                            "detail": f"A loop is nested inside another loop (line {subnode.lineno}). This can lead to O(N^2) or worse performance.",
+                        })
+                        break
+
+    # Recursion no base case
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            has_return = any(isinstance(n, ast.Return) for n in ast.walk(node))
+            has_recursive_call = False
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == node.name:
+                    has_recursive_call = True
+            if has_recursive_call and not has_return:
+                visitor.results.append({
+                    "misconception_id": "recursion_no_base_case",
+                    "misconception": "Recursion without base case",
+                    "concept": "Recursion fundamentals",
+                    "severity": "high",
+                    "detail": f"Function '{node.name}' calls itself without a return statement base case (line {node.lineno}).",
+                })
+
+    # Infinite Loop (while True without break)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.While):
+            is_true = isinstance(node.test, ast.Constant) and node.test.value is True
+            has_break = any(isinstance(n, ast.Break) for n in ast.walk(node))
+            if is_true and not has_break:
+                visitor.results.append({
+                    "misconception_id": "possible_infinite_loop",
+                    "misconception": "Infinite loop",
+                    "concept": "Loop termination condition",
+                    "severity": "high",
+                    "detail": f"while True loop without a break statement will run infinitely (line {node.lineno}).",
+                })
 
 
 def detect_misconceptions(code: str) -> List[Dict[str, Any]]:

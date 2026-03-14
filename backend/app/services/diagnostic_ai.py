@@ -3,7 +3,10 @@
 import os
 import json
 from typing import Dict, Any, List
-from openai import OpenAI
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _fallback_diagnostic(mapped_issue: Dict[str, Any]) -> Dict[str, Any]:
@@ -51,7 +54,7 @@ def generate_diagnostic_with_ai(
     code_smells: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """Generate LLM-based diagnostic, falling back to rules if no API key."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("INCEPTION_API_KEY")
 
     # Always generate refactoring suggestions (rule-based)
     refactoring = _generate_refactoring_suggestions(
@@ -64,9 +67,11 @@ def generate_diagnostic_with_ai(
         return result
 
     prompt = f"""
-You are an educational coding tutor. Diagnose the conceptual misunderstanding, do not reveal full solution.
+You are an educational coding tutor. Diagnose the conceptual misunderstanding and do not reveal the full solution.
 
 Input:
+Language: {payload.get('language', 'python')}
+
 student_code:
 {payload.get('student_code', '')}
 
@@ -79,22 +84,88 @@ ast_analysis:
 student_history:
 {payload.get('student_history', {})}
 
-Output JSON keys only:
-concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, refactoring_suggestions
+Return strictly valid JSON with keys only:
+concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice
 """
 
+    response_schema = {
+        "name": "DiagnosticResult",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "concept_missed": {"type": "string"},
+                "mistake_type": {"type": "string"},
+                "explanation": {"type": "string"},
+                "hint_1": {"type": "string"},
+                "hint_2": {"type": "string"},
+                "hint_3": {"type": "string"},
+                "practice": {"type": "string"},
+            },
+            "required": [
+                "concept_missed",
+                "mistake_type",
+                "explanation",
+                "hint_1",
+                "hint_2",
+                "hint_3",
+                "practice",
+            ],
+            "additionalProperties": False,
+        },
+    }
+
+    request_body = {
+        "model": os.getenv("INCEPTION_MODEL", "mercury-2"),
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": response_schema,
+        },
+        "stream": False,
+    }
+
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.responses.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
-            input=prompt,
-            temperature=0.2,
+        response = requests.post(
+            "https://api.inceptionlabs.ai/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+            data=json.dumps(request_body),
+            timeout=20,
         )
-        text = response.output_text.strip()
+        response.raise_for_status()
+        body = response.json()
+
+        content = (
+            body.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+
+        if isinstance(content, list):
+            # Some providers return a list of content parts.
+            text = "".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+        elif isinstance(content, dict):
+            result = content
+            result["refactoring_suggestions"] = refactoring
+            return result
+        else:
+            text = str(content).strip()
+
+        # Accept JSON wrapped in markdown/code fences.
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:].strip()
+
+        if not text.startswith("{") and "{" in text and "}" in text:
+            text = text[text.find("{"): text.rfind("}") + 1]
+
         if text.startswith("{"):
             result = json.loads(text)
-            if "refactoring_suggestions" not in result:
-                result["refactoring_suggestions"] = refactoring
+            result["refactoring_suggestions"] = refactoring
             return result
     except Exception:
         pass

@@ -8,17 +8,65 @@ const api = axios.create({
   timeout: 15000,
 });
 
-export async function runCode(code) {
-  const res = await api.post("/run-code", { code });
+// Attach JWT token to every request if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("cc_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// On 401, clear stored auth so UI falls back to login
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem("cc_token");
+      localStorage.removeItem("cc_user");
+    }
+    return Promise.reject(err);
+  }
+);
+
+// ---------- Auth ----------
+export async function registerUser(name, email, password, level = "beginner") {
+  const res = await api.post("/auth/register", { name, email, password, level });
   return res.data;
 }
 
-export async function submitCode(userId, code) {
+export async function loginUser(email, password) {
+  const res = await api.post("/auth/login", { email, password });
+  return res.data;
+}
+
+export async function getMe() {
+  const res = await api.get("/auth/me");
+  return res.data;
+}
+
+// ---------- Existing ----------
+export async function runCode(language, code) {
+  const res = await api.post("/run-code", { language, code });
+  return res.data;
+}
+
+export async function submitCode(userId, language, code) {
   const res = await api.post("/submit-code", {
     user_id: userId,
-    language: "python",
+    language,
     code,
   });
+  return res.data;
+}
+
+export async function formatCode(language, code) {
+  const res = await api.post("/format-code", { language, code });
+  return res.data;
+}
+
+export async function getASTGraph(language, code) {
+  const res = await api.post("/ast-graph", { language, code });
   return res.data;
 }
 
@@ -32,8 +80,23 @@ export async function getProfile(userId) {
   return res.data;
 }
 
-export async function traceCode(code) {
-  const res = await api.post("/trace", { code });
+export async function getUserSubmissions(userId) {
+  const res = await api.get(`/users/${userId}/submissions`);
+  return res.data;
+}
+
+export async function getNotes(userId) {
+  const res = await api.get(`/users/${userId}/notes`);
+  return res.data;
+}
+
+export async function createNote(submissionId, content) {
+  const res = await api.post("/notes", { submission_id: submissionId, content });
+  return res.data;
+}
+
+export async function traceCode(language, code) {
+  const res = await api.post("/trace", { language, code });
   return res.data;
 }
 

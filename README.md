@@ -1,133 +1,236 @@
-# CodeConcept 🧠💻
+# CodeConcept
 
-**Adaptive AI Code Learning Diagnostic & Concept Correction Engine**
+CodeConcept is an AI-assisted learning platform that helps students understand conceptual mistakes in code, not just syntax errors. It combines runtime execution, static analysis, AST visualization, and guided feedback into one workflow.
 
-CodeConcept is an educational coding tool that goes beyond simple syntax checking and debugging. It analyzes student-written Python code to detect deep **conceptual misunderstandings**, identify **code smells**, compute **complexity metrics**, and trace **execution flow**. Instead of just giving the answer, it provides **progressive hints**, **refactoring suggestions**, and tracks a learner's mastery over time using a **skill graph**.
+## Highlights
 
----
+- JWT-based authentication (register/login/current user).
+- Multi-language code execution support for:
+    - Python
+    - JavaScript
+    - C/C++ (via g++)
+    - Java (via javac/java)
+    - Go
+    - Rust
+- Deep conceptual analysis pipeline for Python submissions:
+    - syntax + AST flags
+    - misconception detection
+    - code smell detection
+    - complexity metrics
+    - concept detection
+    - flow graph generation
+- AST graph endpoint for Python and supported Tree-sitter languages.
+- AI-assisted diagnostics with fallback behavior when no AI key is configured.
+- Learning profile and skill score tracking.
+- Modern React frontend with Monaco editor and visual analysis panels.
 
-## 🚀 Features
-
-### 1. Advanced Static Analysis
-*   **Misconception Detection:** Identifies logical errors (e.g., off-by-one errors, mutable default arguments, float equality issues, shadowing built-ins) using raw Python AST traversal.
-*   **Concept Detector:** Auto-detects programming constructs used in the code (loops, conditionals, comprehensions, recursion, etc.).
-*   **Code Smell Analyzer:** Flags poor practices like deep nesting, large functions, long parameter lists, and unused variables.
-*   **Complexity Metrics:** Calculates cyclomatic complexity, loop depth, and branch counts to evaluate code maintainability.
-
-### 2. Behavioral Analysis
-*   **Execution Tracer:** Runs student code in a sandboxed subprocess using `sys.settrace` to capture step-by-step execution states and variable values.
-*   **Flow Graph Generator:** Parses the AST to build a Control Flow Graph (CFG) and automatically renders it as a Mermaid.js diagram.
-
-### 3. AI-Powered Diagnostics & Learning
-*   **AI Concept Correction:** Uses LLMs (OpenAI) to explain the *why* behind mistakes, generating progressive hints rather than giving away the solution.
-*   **Refactoring Suggestions:** AI and rule-based suggestions to improve code quality without changing logic.
-*   **Learning Skill Graph:** Tracks `correct_usage` and `total_usage` of concepts over time, visualizing mastery levels on a radar chart.
-
----
-
-## 🛠️ Tech Stack
+## Architecture
 
 ### Backend
-*   **Framework:** FastAPI (Python)
-*   **Database:** SQLite with SQLAlchemy ORM
-*   **Analysis:** Python `ast` module, `sys.settrace` (for tracing), Subprocess (for sandboxing)
-*   **AI Integration:** OpenAI API (`gpt-4o-mini` or similar)
+
+- Framework: FastAPI
+- Database ORM: SQLAlchemy
+- Validation: Pydantic
+- Auth: JWT (`python-jose`) + bcrypt (`passlib`)
+- Default DB: SQLite (`sqlite:///./codeconcept.db`)
 
 ### Frontend
-*   **Framework:** React (Vite)
-*   **Styling:** Custom CSS (Modern, dark-theme, glassmorphism UI)
-*   **Visualizations:** 
-    *   [Recharts](https://recharts.org/) for Skill Graph Radar Charts
-    *   [Mermaid.js](https://mermaid.js.org/) for Control Flow Diagrams
 
----
+- React + Vite
+- Routing: React Router
+- API client: Axios
+- Editor: Monaco
+- Charts/visuals: Recharts, React Flow
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 CodeConcept/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                     # FastAPI application & API routes
-│   │   ├── models.py                   # SQLAlchemy database models (User, Submission, ConceptSkill)
-│   │   ├── database.py                 # SQLite DB connection setup
-│   │   ├── data/
-│   │   │   └── concept_rules.json      # Rules engine for 15+ misconceptions
-│   │   ├── services/
-│   │   │   ├── static_analyzer.py      # Base AST parsing
-│   │   │   ├── misconception_detector.py # Logical AST rules detection
-│   │   │   ├── smell_analyzer.py       # Code smell detection
-│   │   │   ├── complexity_analyzer.py  # Cyclomatic complexity calculation
-│   │   │   ├── concept_detector.py     # Used features detection
-│   │   │   ├── execution_tracer.py     # Sandboxed step-by-step tracing
-│   │   │   ├── flow_graph.py           # AST to Mermaid control flow graph
-│   │   │   ├── profile_service.py      # Learning progress & skill tracking
-│   │   │   └── diagnostic_ai.py        # OpenAI API integration & refactoring hints
-│   └── requirements.txt
-│
-└── frontend/
-    ├── src/
-    │   ├── App.jsx                     # Main application layout & state
-    │   ├── api.js                      # Axios API client
-    │   ├── index.css                   # Global styles & UI components
-    │   └── components/                 # UI Components (TabBar, Editor, Tracers, Charts, etc.)
-    ├── package.json
-    └── vite.config.js
+    backend/
+        app/
+            main.py
+            auth_routes.py
+            database.py
+            models.py
+            routes/
+            schemas/
+            services/
+            data/
+        requirements.txt
+    frontend/
+        src/
+            App.jsx
+            api.js
+            components/
+            pages/
+        package.json
+    README.md
 ```
 
----
+## Prerequisites
 
-## 💻 Installation & Setup
+- Python 3.10+
+- Node.js 18+
+- npm
 
-### Prerequisites
-*   Node.js (v16+)
-*   Python (3.9+)
-*   OpenAI API Key (Optional, but required for AI hints)
+Optional (for non-Python runtime execution):
 
-### 1. Backend Setup
+- Node.js runtime (`node`) for JavaScript execution
+- GCC/G++ for C/C++ execution
+- JDK (`javac`, `java`) for Java execution
+- Go toolchain (`go`) for Go execution
+- Rust toolchain (`rustc`) for Rust execution
 
-```bash
+## Quick Start
+
+### 1) Clone and enter project
+
+```powershell
+git clone <your-repo-url>
+cd CodeConcept
+```
+
+### 2) Start backend
+
+```powershell
 cd backend
 python -m venv .venv
-# Activate virtual environment
-# Windows: .venv\Scripts\activate
-# Mac/Linux: source .venv/bin/activate
-
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-# Set your OpenAI API key (optional)
-# Windows: $env:OPENAI_API_KEY="your-key-here"
-# Mac/Linux: export OPENAI_API_KEY="your-key-here"
-
-# Start the FastAPI server
 uvicorn app.main:app --reload --port 8000
 ```
-*The backend will be available at `http://localhost:8000`. The DB will be automatically created on the first run.*
 
-### 2. Frontend Setup
+Backend:
 
-```bash
+- API base: `http://localhost:8000`
+- Interactive docs: `http://localhost:8000/docs`
+
+### 3) Start frontend (new terminal)
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
-*The frontend will be available at `http://localhost:5173`.*
 
----
+Frontend:
 
-## 🎮 How to Use
+- App: `http://localhost:5173`
 
-1. Open `http://localhost:5173` in your browser.
-2. Click **"Create Learner"** to initialize a new user profile.
-3. Write or paste Python code into the **Code Editor**.
-   * *Try introducing a logical error like an off-by-one loop: `for i in range(len(arr)+1):`*
-4. Click **"Analyze"**.
-5. Explore the interactive tabs:
-   * **Diagnosis:** See AI-driven explanations and progressive hints for any concepts missed.
-   * **Code Quality:** Check for code smells, complexity metrics, and detected concepts.
-   * **Trace & Flow:** Step through the code execution line-by-line and view the Mermaid control flow graph.
-   * **Progress:** View your mastery across different Python concepts mapped on a dynamic radar chart.
+## Environment Variables
 
----
+Backend reads environment variables at runtime (optionally from `.env`):
 
-*Built locally with AI assistance.*
+- `DATABASE_URL`
+    - Default: `sqlite:///./codeconcept.db`
+    - Set this for PostgreSQL or other SQLAlchemy-supported databases.
+
+- `JWT_SECRET`
+    - Default exists for local development.
+    - Must be overridden in production.
+
+- `INCEPTION_API_KEY`
+    - Optional key used by AI diagnostic service.
+
+- `INCEPTION_MODEL`
+    - Optional model override for diagnostics.
+
+Example `.env` (backend):
+
+```env
+DATABASE_URL=sqlite:///./codeconcept.db
+JWT_SECRET=replace-with-a-strong-secret
+INCEPTION_API_KEY=
+INCEPTION_MODEL=mercury-2
+```
+
+## API Endpoints
+
+### Public
+
+- `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /users` (legacy helper endpoint; can create user records without auth checks)
+
+### Authenticated (Bearer token)
+
+- `GET /auth/me`
+- `POST /run-code`
+- `POST /format-code`
+- `POST /trace`
+- `POST /submit-code`
+- `POST /ast-graph`
+- `GET /profiles/{user_id}`
+
+Notes:
+
+- `run-code` supports multiple languages as listed above.
+- `submit-code` accepts language, but deep analysis is currently Python-first. Non-Python requests return limited analysis placeholders.
+- `trace` currently uses Python execution tracing.
+
+## Frontend Configuration
+
+Frontend uses:
+
+- `VITE_API_BASE` (optional)
+    - Default: `http://localhost:8000`
+
+Example `frontend/.env`:
+
+```env
+VITE_API_BASE=http://localhost:8000
+```
+
+## Typical Workflow
+
+1. Register or login.
+2. Open the Editor page.
+3. Select language and write/upload code.
+4. Click `Run` for runtime output.
+5. Click `Analyze` for conceptual feedback, smells, complexity, and profile updates.
+6. Explore AST/trace/flow/progress tabs.
+
+## Development Commands
+
+### Backend
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --port 8000
+```
+
+Optional local syntax validation:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m compileall app
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm run dev
+npm run build
+npm run preview
+```
+
+## Current Limitations
+
+- Conceptual analysis quality is strongest for Python.
+- Execution trace endpoint is Python-specific.
+- Notes/activity routes are present but currently have placeholder implementations.
+- Monaco editor component is currently configured with Python language mode; full per-language editor mode parity can be improved.
+- Runtime execution uses local compilers/interpreters; deploy only in sandboxed environments for untrusted code.
+
+## Security Notes
+
+- Never use default JWT secrets in production.
+- Restrict CORS origins in production.
+- Run code execution in isolated containers/sandboxes for real-world deployment.
+
+## License
+
+No license file is currently defined in this repository.

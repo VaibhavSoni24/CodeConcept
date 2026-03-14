@@ -1,14 +1,10 @@
-"""Flow Graph Generator — builds a control flow graph from AST."""
+"""Flow Graph Generator — builds a control flow graph from JSON AST."""
+from typing import Any, Dict, List
+from .ast_service import parse_ast
 
-import ast
-from typing import Any, Dict, List, Tuple
-
-
-def build_flow_graph(code: str) -> Dict[str, Any]:
-    """Parse code and produce a control flow graph with nodes, edges, and Mermaid string."""
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
+def build_flow_graph(language: str, code: str) -> Dict[str, Any]:
+    ast_json = parse_ast(language, code)
+    if not ast_json or ast_json.get("type") in ["SyntaxError", "UnsupportedLanguageOrParserMissing"]:
         return {"nodes": [], "edges": [], "mermaid": "graph TD\n  Error[Syntax Error]"}
 
     nodes: List[Dict[str, Any]] = []
@@ -22,102 +18,64 @@ def build_flow_graph(code: str) -> Dict[str, Any]:
         node_id += 1
         return nid
 
-    def _process_body(body: list, prev_id: int) -> int:
-        """Process a list of statements, chaining them sequentially."""
+    def _get_mapped_type(ntype: str) -> str:
+        if ntype in ["For", "While", "for_statement", "while_statement", "do_statement", "for_in_statement"]:
+            return "Loop"
+        if ntype in ["If", "if_statement"]:
+            return "Condition"
+        if ntype in ["Assign", "AugAssign", "variable_declaration", "lexical_declaration", "assignment_expression"]:
+            return "Assignment"
+        if ntype in ["Call", "call_expression"]:
+            return "Call"
+        if ntype in ["Return", "return_statement"]:
+            return "Return"
+        if ntype in ["FunctionDef", "function_declaration", "arrow_function"]:
+            return "FunctionDef"
+        return ""
+
+    def _traverse(node: Dict[str, Any], prev_id: int) -> int:
         current = prev_id
-        for stmt in body:
-            nid = _process_stmt(stmt)
-            if nid is not None:
-                edges.append({"from": current, "to": nid})
-                current = nid
-        return current
+        mapped_type = _get_mapped_type(node.get("type", ""))
+        
+        nid = None
+        if mapped_type:
+            label = f"{mapped_type} (line {node.get('line', '?')})"
+            if mapped_type == "FunctionDef":
+                label = f"Function {node.get('label', '')}" 
+            nid = _add_node(mapped_type, label)
+            edges.append({"from": current, "to": nid})
+            current = nid
 
-    def _process_stmt(stmt: ast.AST) -> int | None:
-        """Process a single statement and return its node id."""
+        children = node.get("children", [])
+        
+        last_in_body = current
+        for child in children:
+            last_in_body = _traverse(child, last_in_body)
 
-        if isinstance(stmt, ast.FunctionDef):
-            nid = _add_node("FunctionDef", f"def {stmt.name}()")
-            if stmt.body:
-                _process_body(stmt.body, nid)
-            return nid
+        if mapped_type == "Loop" and nid is not None:
+            edges.append({"from": last_in_body, "to": nid})
+            return nid 
+            
+        return last_in_body
 
-        elif isinstance(stmt, ast.For):
-            nid = _add_node("Loop", f"for (line {stmt.lineno})")
-            last = _process_body(stmt.body, nid)
-            # Loop-back edge
-            edges.append({"from": last, "to": nid})
-            return nid
-
-        elif isinstance(stmt, ast.While):
-            nid = _add_node("Loop", f"while (line {stmt.lineno})")
-            last = _process_body(stmt.body, nid)
-            edges.append({"from": last, "to": nid})
-            return nid
-
-        elif isinstance(stmt, ast.If):
-            nid = _add_node("Condition", f"if (line {stmt.lineno})")
-            if stmt.body:
-                _process_body(stmt.body, nid)
-            if stmt.orelse:
-                _process_body(stmt.orelse, nid)
-            return nid
-
-        elif isinstance(stmt, ast.Return):
-            return _add_node("Return", f"return (line {stmt.lineno})")
-
-        elif isinstance(stmt, ast.Assign):
-            targets = ", ".join(
-                t.id if isinstance(t, ast.Name) else "…"
-                for t in stmt.targets
-            )
-            return _add_node("Assignment", f"{targets} = … (line {stmt.lineno})")
-
-        elif isinstance(stmt, ast.Expr):
-            if isinstance(stmt.value, ast.Call):
-                func_name = ""
-                if isinstance(stmt.value.func, ast.Name):
-                    func_name = stmt.value.func.id
-                elif isinstance(stmt.value.func, ast.Attribute):
-                    func_name = stmt.value.func.attr
-                return _add_node("Call", f"{func_name}() (line {stmt.lineno})")
-            return _add_node("Expression", f"expr (line {stmt.lineno})")
-
-        elif isinstance(stmt, ast.AugAssign):
-            target = stmt.target.id if isinstance(stmt.target, ast.Name) else "…"
-            return _add_node("Assignment", f"{target} += … (line {stmt.lineno})")
-
-        elif isinstance(stmt, ast.Try):
-            return _add_node("TryBlock", f"try (line {stmt.lineno})")
-
-        elif isinstance(stmt, ast.ClassDef):
-            return _add_node("ClassDef", f"class {stmt.name}")
-
-        else:
-            return None
-
-    # Build the graph
     start_id = _add_node("Start", "Start")
-    last_id = _process_body(tree.body, start_id)
+    last_id = _traverse(ast_json, start_id)
     end_id = _add_node("End", "End")
     edges.append({"from": last_id, "to": end_id})
 
-    # Generate Mermaid string
     mermaid = _generate_mermaid(nodes, edges)
 
     return {"nodes": nodes, "edges": edges, "mermaid": mermaid}
 
 
 def _sanitize_label(label: str) -> str:
-    """Sanitize label for Mermaid compatibility."""
     return label.replace('"', "'").replace("(", "‹").replace(")", "›")
 
 
 def _generate_mermaid(
     nodes: List[Dict[str, Any]], edges: List[Dict[str, int]]
 ) -> str:
-    """Convert nodes and edges to a Mermaid graph TD string."""
     lines = ["graph TD"]
-
     shape_map = {
         "Start": ("([", "])"),
         "End": ("([", "])"),

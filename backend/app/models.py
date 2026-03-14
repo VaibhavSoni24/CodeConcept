@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -9,7 +9,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    email = Column(String(120), nullable=True, unique=True)
+    email = Column(String(120), nullable=False, unique=True)
+    password_hash = Column(String(255), nullable=True)
     level = Column(String(50), default="beginner")
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -26,6 +27,7 @@ class Submission(Base):
     language = Column(String(20), default="python")
     timestamp = Column(DateTime, default=datetime.utcnow)
     result = Column(Text, nullable=False)
+    analysis_result = Column(JSON, nullable=True)
 
     user = relationship("User", back_populates="submissions")
     concept_errors = relationship("ConceptError", back_populates="submission", cascade="all, delete")
@@ -62,9 +64,23 @@ class ConceptSkill(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     concept = Column(String(120), nullable=False)
+    language = Column(String, default="python", server_default="python")
     correct_usage = Column(Integer, default=0)
     total_usage = Column(Integer, default=0)
     score = Column(Integer, default=0)  # stored as int 0-100 for simplicity
     last_updated = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class Note(Base):
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    analysis_id = Column(Integer, ForeignKey("submissions.id"), nullable=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    submission = relationship("Submission")

@@ -1,3 +1,4 @@
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   RadarChart,
   PolarGrid,
@@ -9,6 +10,19 @@ import {
 } from "recharts";
 
 function SkillRadarChart({ skillScores }) {
+  const [activeLang, setActiveLang] = useState('python');
+
+  const languages = useMemo(() => {
+    if (!skillScores) return [];
+    return [...new Set(skillScores.map(s => s.language || 'python'))];
+  }, [skillScores]);
+
+  useEffect(() => {
+    if (languages.length > 0 && !languages.includes(activeLang)) {
+      setActiveLang(languages[0]);
+    }
+  }, [languages, activeLang]);
+
   if (!skillScores || skillScores.length === 0) {
     return (
       <div className="card card-glow">
@@ -25,19 +39,38 @@ function SkillRadarChart({ skillScores }) {
     );
   }
 
-  const data = skillScores.map((s) => ({
-    concept: s.concept.replace(/_/g, " "),
-    score: s.score,
-    fullMark: 100,
-  }));
+  const data = skillScores
+    .filter((s) => (s.language || 'python') === activeLang)
+    .map((s) => ({
+      concept: s.concept.replace(/_/g, " "),
+      score: s.score,
+      fullMark: 100,
+    }));
 
   return (
     <div className="card card-glow fade-in">
-      <div className="card-header">
-        <h2>
+      <div className="card-header flex justify-between items-center mb-2">
+        <h2 className="flex items-center gap-2">
           <span className="card-icon purple">🎯</span>
           Skill Graph
         </h2>
+        {languages.length > 0 && (
+          <div className="flex gap-1">
+            {languages.map(l => (
+              <button
+                key={l}
+                onClick={() => setActiveLang(l)}
+                className={`px-2 py-1 text-[0.7rem] uppercase font-bold rounded ${
+                  activeLang === l 
+                    ? 'bg-[var(--accent)] text-white' 
+                    : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="radar-container">
         <ResponsiveContainer width="100%" height={280}>

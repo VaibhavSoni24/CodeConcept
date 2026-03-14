@@ -54,6 +54,7 @@ def update_skill_scores(
     user_id: int,
     concepts_detected: List[str],
     error_concepts: List[str],
+    language: str = "python"
 ):
     """Update concept skill scores. Concepts without errors get correct_usage++."""
     error_set = set(error_concepts)
@@ -61,13 +62,18 @@ def update_skill_scores(
     for concept in concepts_detected:
         skill = (
             db.query(ConceptSkill)
-            .filter(ConceptSkill.user_id == user_id, ConceptSkill.concept == concept)
+            .filter(
+                ConceptSkill.user_id == user_id, 
+                ConceptSkill.concept == concept,
+                ConceptSkill.language == language
+            )
             .first()
         )
         if skill is None:
             skill = ConceptSkill(
                 user_id=user_id,
                 concept=concept,
+                language=language,
                 correct_usage=0,
                 total_usage=0,
                 score=0,
@@ -88,6 +94,7 @@ def get_skill_scores(db: Session, user_id: int) -> List[Dict[str, Any]]:
     return [
         {
             "concept": s.concept,
+            "language": s.language,
             "correct_usage": s.correct_usage,
             "total_usage": s.total_usage,
             "score": s.score,
