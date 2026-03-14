@@ -42,7 +42,7 @@ const TABS = [
   { id: "progress", label: "Progress", icon: "📊" },
 ];
 
-function EditorPage({ user, token, handleLogout }) {
+function EditorPage({ user, token, handleLogout, credits, setCredits }) {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(STARTER_CODE["python"]);
   const [runOutput, setRunOutput] = useState({
@@ -141,6 +141,11 @@ function EditorPage({ user, token, handleLogout }) {
   }, [language, code, handleLogout]);
 
   const handleAnalyze = useCallback(async () => {
+    if (credits !== null && credits < 5) {
+      alert("You don't have enough credits. Please recharge from the shop.");
+      return;
+    }
+
     setLoading("analyze");
     setError("");
     try {
@@ -157,6 +162,10 @@ function EditorPage({ user, token, handleLogout }) {
          setProgressData({ profiles: result.profile, skill_scores: result.skill_scores });
       } else {
         await fetchUserProfile();
+      }
+
+      if (result.remaining_credits !== undefined) {
+         setCredits(result.remaining_credits);
       }
 
       if (traceResult.trace_available) {
@@ -192,6 +201,14 @@ function EditorPage({ user, token, handleLogout }) {
         </div>
 
         <div className="flex items-center gap-3">
+          {credits !== null && (
+            <div className="text-sm border border-[var(--border)] px-3 py-1 rounded-lg flex items-center gap-2">
+              <span className="font-semibold" style={{ color: credits > 50 ? '#10b981' : credits >= 20 ? '#eab308' : '#ef4444' }}>
+                Credits: {credits}
+              </span>
+              <span className="text-[var(--text-muted)] text-xs">(Cost: 5)</span>
+            </div>
+          )}
           <input 
             type="file" 
             ref={fileInputRef} 

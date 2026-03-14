@@ -5,7 +5,7 @@ import { User, Mail, Calendar, Award } from 'lucide-react';
 import { computeAverageConfidence, getUserRank } from '../utils/analytics';
 import Loader from '../components/Loader';
 
-function Profile({ user }) {
+function Profile({ user, credits }) {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeSkillLang, setActiveSkillLang] = useState('python');
@@ -82,6 +82,12 @@ function Profile({ user }) {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-[var(--text-muted)] flex items-center gap-2"><Award size={14}/> Base Level</span>
                 <span className="font-semibold text-[var(--text-primary)] capitalize">{computedLevel}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-[var(--text-muted)] flex items-center gap-2"><Award size={14}/> Credits Balance</span>
+                <span className="font-semibold" style={{ color: credits !== null ? (credits > 50 ? '#10b981' : credits >= 20 ? '#eab308' : '#ef4444') : 'inherit' }}>
+                  {credits !== null ? credits : "..."}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-[var(--text-muted)] flex items-center gap-2"><Calendar size={14}/> Joined</span>

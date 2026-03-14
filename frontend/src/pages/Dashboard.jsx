@@ -14,7 +14,7 @@ import {
 } from '../utils/analytics';
 import Loader from '../components/Loader';
 
-function Dashboard({ user }) {
+function Dashboard({ user, credits }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -162,6 +162,14 @@ function Dashboard({ user }) {
               ))}
               {stats.languages.length === 0 && <span className="text-xs text-gray-500">None</span>}
             </div>
+          </div>
+        </div>
+
+        <div className={`card p-6 flex items-center gap-4 border-l-4 ${credits > 50 ? "border-l-emerald-500" : (credits >= 20 ? "border-l-yellow-500" : "border-l-red-500")}`}>
+          <div className={`p-3 rounded-lg ${credits > 50 ? "bg-emerald-500/10" : (credits >= 20 ? "bg-yellow-500/10" : "bg-red-500/10")}`}><Award className={credits > 50 ? "text-emerald-500" : (credits >= 20 ? "text-yellow-500" : "text-red-500")} size={24}/></div>
+          <div>
+            <p className="text-sm text-gray-400 font-semibold mb-1">Credits Remaining</p>
+            <p className={`text-2xl font-bold ${credits > 50 ? "text-emerald-500" : (credits >= 20 ? "text-yellow-500" : "text-red-500")}`}>{credits !== null ? credits : "..."}</p>
           </div>
         </div>
       </div>

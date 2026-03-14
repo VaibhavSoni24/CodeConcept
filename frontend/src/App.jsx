@@ -7,7 +7,8 @@ import Activity from "./pages/Activity";
 import Profile from "./pages/Profile";
 import Knowledge from "./pages/Knowledge";
 import About from "./pages/About";
-import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon, BookOpen } from "lucide-react";
+import Shop from "./pages/Shop";
+import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon, BookOpen, ShoppingCart } from "lucide-react";
 import { getUserSubmissions } from "./api";
 import { computeAverageConfidence, getUserRank } from "./utils/analytics";
 
@@ -36,6 +37,7 @@ function Navigation({ user, onLogout }) {
     { path: "/activity", label: "Activity", icon: <ActivityIcon size={18} /> },
     { path: "/profile", label: "Profile", icon: <User size={18} /> },
     { path: "/knowledge", label: "Knowledge", icon: <BookOpen size={18} /> },
+    { path: "/shop", label: "Shop", icon: <ShoppingCart size={18} /> },
     { path: "/about", label: "About", icon: <Info size={18} /> },
   ];
 
@@ -95,19 +97,29 @@ function Navigation({ user, onLogout }) {
 }
 
 import ErrorBoundary from "./components/ErrorBoundary";
+import { getUserCredits } from "./api";
 
 function MainApp({ user, token, handleLogout }) {
+  const [credits, setCredits] = useState(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      getUserCredits(user.id).then(data => setCredits(data.credits)).catch(() => {});
+    }
+  }, [user?.id]);
+
   return (
     <div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
       <Navigation user={user} onLogout={handleLogout} />
       <main className="flex-1 ml-64 min-h-screen relative overflow-x-hidden">
         <ErrorBoundary>
           <Routes>
-            <Route path="/" element={<Dashboard user={user} token={token} />} />
-            <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} />} />
+            <Route path="/" element={<Dashboard user={user} token={token} credits={credits} />} />
+            <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} credits={credits} setCredits={setCredits} />} />
             <Route path="/activity" element={<Activity user={user} />} />
-            <Route path="/profile" element={<Profile user={user} />} />
+            <Route path="/profile" element={<Profile user={user} credits={credits} />} />
             <Route path="/knowledge" element={<Knowledge user={user} />} />
+            <Route path="/shop" element={<Shop />} />
             <Route path="/about" element={<About />} />
           </Routes>
         </ErrorBoundary>

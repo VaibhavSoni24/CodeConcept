@@ -107,6 +107,13 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     if user is None:
         raise HTTPException(status_code=404, detail="User not found. Create user first.")
 
+    COST_PER_ANALYSIS = 5
+    if user.credits < COST_PER_ANALYSIS:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits. Please recharge from the shop."
+        )
+
     # --- Run all analyzers via language dispatcher ---
     try:
         analysis_data = dispatch_analysis(payload.language, payload.code)
@@ -164,6 +171,10 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
     update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
+    
+    # Deduct credits
+    user.credits -= COST_PER_ANALYSIS
+    
     db.commit()
 
     # --- Build unified response ---
@@ -193,4 +204,5 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         # Profile data
         "profile": get_profile_summary(db, payload.user_id),
         "skill_scores": get_skill_scores(db, payload.user_id),
+        "remaining_credits": user.credits,
     }

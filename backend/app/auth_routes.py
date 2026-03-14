@@ -23,6 +23,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         email=payload.email,
         password_hash=hash_password(payload.password),
         level=payload.level,
+        credits=100,
     )
     db.add(user)
     db.commit()

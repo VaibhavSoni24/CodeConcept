@@ -105,4 +105,9 @@ export async function getKnowledgeRecommendations(userId) {
   return res.data;
 }
 
+export async function getUserCredits(userId) {
+  const res = await api.get(`/users/${userId}/credits`);
+  return res.data;
+}
+
 export default api;
