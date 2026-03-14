@@ -80,18 +80,22 @@ function Navigation({ user, onLogout }) {
   );
 }
 
+import ErrorBoundary from "./components/ErrorBoundary";
+
 function MainApp({ user, token, handleLogout }) {
   return (
     <div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
       <Navigation user={user} onLogout={handleLogout} />
       <main className="flex-1 ml-64 min-h-screen relative overflow-x-hidden">
-        <Routes>
-          <Route path="/" element={<Dashboard user={user} token={token} />} />
-          <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} />} />
-          <Route path="/activity" element={<Activity user={user} />} />
-          <Route path="/profile" element={<Profile user={user} />} />
-          <Route path="/about" element={<About />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Dashboard user={user} token={token} />} />
+            <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} />} />
+            <Route path="/activity" element={<Activity user={user} />} />
+            <Route path="/profile" element={<Profile user={user} />} />
+            <Route path="/about" element={<About />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );

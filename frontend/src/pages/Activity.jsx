@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { getUserSubmissions, getNotes, createNote } from '../api';
 import { Play, Code, Clock, BookOpen, Send } from 'lucide-react';
 import CodeEditor from '../components/CodeEditor';
+import Loader from '../components/Loader';
+import { normalizeAnalysis } from '../utils/normalizeAnalysis';
 
 function Activity({ user }) {
   const [submissions, setSubmissions] = useState([]);
@@ -16,8 +18,8 @@ function Activity({ user }) {
       if (!user?.id) return;
       try {
         const [subData, notesData] = await Promise.all([
-          getUserSubmissions(user.id),
-          getNotes(user.id)
+          getUserSubmissions(user.id).catch(() => []),
+          getNotes(user.id).catch(() => [])
         ]);
         setSubmissions(subData);
         setAllNotes(notesData);
@@ -50,9 +52,14 @@ function Activity({ user }) {
     }
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><div className="spinner w-8 h-8" /></div>;
+  if (loading) return <Loader />;
 
   const currentNotes = allNotes.filter(n => n.submission_id === selectedSub?.id);
+
+  const getSubAnalysis = (sub) => {
+    if (!sub) return { confidence: 0, mistakes: [] };
+    return normalizeAnalysis(sub);
+  };
 
   return (
     <div className="flex h-full w-full bg-[var(--bg-primary)] overflow-hidden">
@@ -70,31 +77,35 @@ function Activity({ user }) {
           {submissions.length === 0 ? (
             <div className="text-center text-gray-500 py-10">No past activity found.</div>
           ) : (
-            submissions.map(sub => (
-              <div 
-                key={sub.id} 
-                onClick={() => setSelectedSub(sub)}
-                className={`p-4 rounded-xl cursor-pointer transition-all border ${
-                  selectedSub?.id === sub.id 
-                    ? "bg-[var(--bg-card)] border-[var(--accent)] shadow-[0_0_15px_var(--accent-glow)]" 
-                    : "bg-[var(--bg-card)] border-[var(--border)] hover:border-[var(--border-hover)]"
-                }`}
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold px-2 py-1 bg-gray-800 rounded text-gray-300">
-                    {sub.language.toUpperCase()}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {new Date(sub.timestamp).toLocaleString(undefined, {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    })}
-                  </span>
+            submissions.map(sub => {
+              const analysis = getSubAnalysis(sub);
+              return (
+                <div 
+                  key={sub.id} 
+                  onClick={() => setSelectedSub(sub)}
+                  className={`p-4 rounded-xl cursor-pointer transition-all border ${
+                    selectedSub?.id === sub.id 
+                      ? "bg-[var(--bg-card)] border-[var(--accent)] shadow-[0_0_15px_var(--accent-glow)]" 
+                      : "bg-[var(--bg-card)] border-[var(--border)] hover:border-[var(--border-hover)]"
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold px-2 py-1 bg-gray-800 rounded text-gray-300">
+                      {(sub.language || "code").toUpperCase()}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(sub.timestamp || sub.created_at || Date.now()).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)] mt-2 truncate w-full flex justify-between">
+                     <span>{sub.result || "Analyzed"}</span>
+                     <span className="text-xs text-indigo-400">Conf: {Math.round(analysis.confidence * 100)}%</span>
+                  </div>
                 </div>
-                <div className="text-sm font-semibold text-[var(--text-primary)] mt-2 truncate w-full">
-                  {sub.result}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -107,7 +118,7 @@ function Activity({ user }) {
               <div>
                 <h1 className="text-2xl font-bold text-[var(--text-primary)]">Submission #{selectedSub.id}</h1>
                 <p className="text-[var(--text-secondary)] text-sm mt-1">
-                  Analysis detected: <span className="text-indigo-400">{selectedSub.result}</span>
+                  Analysis detected: <span className="text-indigo-400">{selectedSub.result || "Finished"}</span>
                 </p>
               </div>
             </header>
@@ -120,8 +131,8 @@ function Activity({ user }) {
                 </div>
                 <div className="h-[400px]">
                   <CodeEditor 
-                    code={selectedSub.code} 
-                    language={selectedSub.language === "python" ? "python" : selectedSub.language}
+                    code={selectedSub.code || ""} 
+                    language={selectedSub.language === "python" ? "python" : selectedSub.language || "javascript"}
                     readOnly={true}
                   />
                 </div>
@@ -134,7 +145,9 @@ function Activity({ user }) {
                   </div>
                   <div className="p-6">
                     <p className="text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
-                      {selectedSub.analysis_result || "No detailed feedback recorded for this execution."}
+                      {typeof selectedSub.analysis_result === 'string' 
+                          ? selectedSub.analysis_result 
+                          : JSON.stringify(selectedSub.analysis_result, null, 2) || "No detailed feedback recorded for this execution."}
                     </p>
                   </div>
                 </div>

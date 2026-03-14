@@ -1,5 +1,37 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BookOpen, Code, Zap, Target } from 'lucide-react';
+import mermaid from 'mermaid';
+
+function Mermaid({ chart }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    if (ref.current) {
+      mermaid.contentLoaded();
+    }
+  }, [chart]);
+  
+  return (
+    <div className="mermaid flex justify-center w-full overflow-x-auto" ref={ref}>
+      {chart}
+    </div>
+  );
+}
+
+const diagram = `
+graph TD
+A[User Writes Code] --> B[Code Submitted]
+B --> C[Execution Sandbox]
+C --> D[AST Parser]
+D --> E[Concept Analysis Engine]
+E --> F[Misconception Detection]
+F --> G[Code Quality Analyzer]
+G --> H[Complexity Analyzer]
+H --> I[AI Diagnostic Engine]
+I --> J[Visualization Engine]
+J --> K[Learning Dashboard]
+K --> L[Skill Graph + Feedback]
+`;
 
 function About() {
   return (
@@ -28,6 +60,13 @@ function About() {
             <li><strong>Concept Mapping:</strong> Every mistake is categorized into foundational computer science concepts (e.g., "State Mutation", "Loop Invariants").</li>
             <li><strong>Adaptive Learning:</strong> The platform tracks your confidence scores across concepts, offering targeted feedback and YouTube resource recommendations when you struggle.</li>
           </ul>
+        </section>
+
+        <section className="card p-8 mb-8">
+          <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-6">System Workflow</h2>
+          <div className="bg-[var(--bg-secondary)] p-4 rounded-xl border border-[var(--border)] overflow-x-auto">
+             <Mermaid chart={diagram} />
+          </div>
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

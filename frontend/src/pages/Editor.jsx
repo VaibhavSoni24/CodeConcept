@@ -56,21 +56,29 @@ function EditorPage({ user, token, handleLogout }) {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("diagnosis");
   const [loadedProfile, setLoadedProfile] = useState({ profiles: [], skillScores: [] });
+  const [progressData, setProgressData] = useState(null);
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    if (user?.id) {
-      getProfile(user.id).then((data) => {
-        setLoadedProfile({
-          profiles: data.profiles || [],
-          skillScores: data.skill_scores || [],
-        });
-      }).catch(console.error);
+  const fetchUserProfile = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const data = await getProfile(user.id);
+      setLoadedProfile({
+        profiles: data.profiles || [],
+        skillScores: data.skill_scores || [],
+      });
+      setProgressData(data);
+    } catch (err) {
+      console.error(err);
     }
   }, [user?.id]);
 
-  const profiles = useMemo(() => feedback?.profile || loadedProfile.profiles, [feedback, loadedProfile.profiles]);
-  const skillScores = useMemo(() => feedback?.skill_scores || loadedProfile.skillScores, [feedback, loadedProfile.skillScores]);
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  const profiles = useMemo(() => progressData?.profiles || loadedProfile.profiles, [progressData, loadedProfile.profiles]);
+  const skillScores = useMemo(() => progressData?.skill_scores || loadedProfile.skillScores, [progressData, loadedProfile.skillScores]);
 
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
@@ -142,6 +150,15 @@ function EditorPage({ user, token, handleLogout }) {
       ]);
       setFeedback(result);
       
+      // Update local progress state mapping
+      if (result.learning_progress) {
+        setProgressData(result.learning_progress);
+      } else if (result.profile && result.skill_scores) {
+         setProgressData({ profiles: result.profile, skill_scores: result.skill_scores });
+      } else {
+        await fetchUserProfile();
+      }
+
       if (traceResult.trace_available) {
         setExecutionTrace(traceResult.trace);
       } else {
@@ -156,7 +173,7 @@ function EditorPage({ user, token, handleLogout }) {
     } finally {
       setLoading("");
     }
-  }, [user, language, code, handleLogout]);
+  }, [user, language, code, handleLogout, fetchUserProfile]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden max-h-screen">

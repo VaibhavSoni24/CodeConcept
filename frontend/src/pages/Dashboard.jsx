@@ -5,7 +5,9 @@ import {
   BarChart, Bar
 } from 'recharts';
 import api, { getProfile, getUserSubmissions } from '../api';
-import { Award, Target, Activity, Zap } from 'lucide-react';
+import { Award, Target, Activity as ActivityIcon, Zap } from 'lucide-react';
+import { normalizeAnalysis } from '../utils/normalizeAnalysis';
+import Loader from '../components/Loader';
 
 function Dashboard({ user }) {
   const [loading, setLoading] = useState(true);
@@ -19,8 +21,8 @@ function Dashboard({ user }) {
       try {
         setLoading(true);
         const [profData, subData] = await Promise.all([
-          getProfile(user.id),
-          getUserSubmissions(user.id)
+          getProfile(user.id).catch(() => null),
+          getUserSubmissions(user.id).catch(() => [])
         ]);
         setProfile(profData);
         setSubmissions(subData);
@@ -33,10 +35,25 @@ function Dashboard({ user }) {
     loadData();
   }, [user]);
 
-  // Aggregate stats
+  // Aggregate stats using normalizeAnalysis
   const stats = useMemo(() => {
     const totalSubmissions = submissions.length;
-    const errorCount = submissions.filter(s => s.result !== "ok" && s.result !== "analysis_completed").length;
+    
+    // Compute Mistakes & Confidence
+    let totalConfidence = 0;
+    let submissionsWithMistakes = 0;
+
+    submissions.forEach(sub => {
+      const parsed = normalizeAnalysis(sub);
+      totalConfidence += parsed.confidence || 0;
+      if (parsed.mistakes && parsed.mistakes.length > 0) {
+        submissionsWithMistakes += 1;
+      }
+    });
+
+    const avgConfidence = totalSubmissions > 0 ? (totalConfidence / totalSubmissions) : 0;
+    const errorRate = totalSubmissions > 0 ? (submissionsWithMistakes / totalSubmissions) : 0;
+
     let rank = "Novice";
     if (totalSubmissions > 50) rank = "Master";
     else if (totalSubmissions > 20) rank = "Advanced";
@@ -44,27 +61,37 @@ function Dashboard({ user }) {
     
     return {
       totalSubmissions,
-      errorRate: totalSubmissions ? Math.round((errorCount / totalSubmissions) * 100) : 0,
+      avgConfidencePercentage: Math.round(avgConfidence * 100),
+      errorRatePercentage: Math.round(errorRate * 100),
       rank,
       languages: [...new Set(submissions.map(s => s.language))]
     };
   }, [submissions]);
 
-  // History for standard chart
+  // History for LineChart based on submissions
   const historyData = useMemo(() => {
-    if (!profile?.profiles) return [];
-    // Convert backend profiles into chartable objects
-    return profile.profiles.map(p => ({
-      name: `Sub ${p.submissions_count}`,
-      confidence: Math.round(p.confidence_score * 100),
-      mastery: Math.min(100, Math.round(p.confidence_score * 120)) // proxy for visual
-    }));
-  }, [profile]);
+    if (!submissions || submissions.length === 0) return [];
+    
+    // Sort chronologically just in case
+    const sortedSubs = [...submissions].sort((a,b) => new Date(a.timestamp || a.created_at) - new Date(b.timestamp || b.created_at));
+    
+    return sortedSubs.map((s, index) => {
+      const parsed = normalizeAnalysis(s);
+      const conf = Math.round((parsed.confidence || 0) * 100);
+      return {
+        name: `Sub ${index + 1}`,
+        date: s.timestamp || s.created_at,
+        confidence: conf,
+        mastery: Math.min(100, Math.round(conf * 1.2)) // proxy for visual
+      };
+    });
+  }, [submissions]);
 
-  // Skill graph data filtered by lang
+  // Skill graph data filtered by lang (fallback safely)
   const availableSkillLangs = useMemo(() => {
-    if (!profile?.skill_scores) return [];
-    return [...new Set(profile.skill_scores.map(s => s.language || 'python'))];
+    if (!profile?.skill_scores) return ['python'];
+    const langs = [...new Set(profile.skill_scores.map(s => s.language || 'python'))];
+    return langs.length > 0 ? langs : ['python'];
   }, [profile]);
 
   useEffect(() => {
@@ -79,11 +106,11 @@ function Dashboard({ user }) {
       .filter(s => (s.language || 'python') === activeSkillLang)
       .map(s => ({
         ...s,
-        concept: s.concept.replace(/_/g, " "),
+        concept: s.concept ? s.concept.replace(/_/g, " ") : "Unknown",
       }));
   }, [profile, activeSkillLang]);
 
-  if (loading) return <div className="p-10 flex justify-center"><div className="spinner w-8 h-8" /></div>;
+  if (loading) return <Loader />;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto w-full p-8 bg-[var(--bg-primary)]">
@@ -108,7 +135,7 @@ function Dashboard({ user }) {
       {/* Top Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="card p-6 flex items-center gap-4 border-l-4 border-l-blue-500">
-          <div className="p-3 bg-blue-500/10 rounded-lg"><Activity className="text-blue-500" size={24}/></div>
+          <div className="p-3 bg-blue-500/10 rounded-lg"><ActivityIcon className="text-blue-500" size={24}/></div>
           <div>
             <p className="text-sm text-gray-400 font-semibold mb-1">Total Submissions</p>
             <p className="text-2xl font-bold">{stats.totalSubmissions}</p>
@@ -119,9 +146,7 @@ function Dashboard({ user }) {
           <div className="p-3 bg-indigo-500/10 rounded-lg"><Target className="text-indigo-500" size={24}/></div>
           <div>
             <p className="text-sm text-gray-400 font-semibold mb-1">Average Confidence</p>
-            <p className="text-2xl font-bold">
-              {historyData.length > 0 ? historyData[historyData.length - 1].confidence : 0}%
-            </p>
+            <p className="text-2xl font-bold">{stats.avgConfidencePercentage}%</p>
           </div>
         </div>
 
@@ -129,7 +154,7 @@ function Dashboard({ user }) {
           <div className="p-3 bg-red-500/10 rounded-lg"><Zap className="text-red-500" size={24}/></div>
           <div>
             <p className="text-sm text-gray-400 font-semibold mb-1">Mistake Rate</p>
-            <p className="text-2xl font-bold">{stats.errorRate}%</p>
+            <p className="text-2xl font-bold">{stats.errorRatePercentage}%</p>
           </div>
         </div>
         
@@ -152,33 +177,39 @@ function Dashboard({ user }) {
         <div className="card p-6 lg:col-span-2 slide-up">
           <h3 className="text-lg font-bold mb-6 text-[var(--text-primary)]">Confidence Trajectory (Over Time)</h3>
           <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="name" stroke="#666" tick={{fill: '#888'}} />
-                <YAxis stroke="#666" tick={{fill: '#888'}} domain={[0, 100]} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#2a2a3c', borderColor: '#444', borderRadius: '8px' }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="confidence" 
-                  stroke="#3b82f6" 
-                  strokeWidth={3}
-                  activeDot={{ r: 8 }} 
-                  name="Confidence %"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="mastery" 
-                  stroke="#10b981" 
-                  strokeWidth={3}
-                  name="Concept Mastery %"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {historyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={historyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                  <XAxis dataKey="name" stroke="#666" tick={{fill: '#888'}} />
+                  <YAxis stroke="#666" tick={{fill: '#888'}} domain={[0, 100]} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#2a2a3c', borderColor: '#444', borderRadius: '8px' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="confidence" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3}
+                    activeDot={{ r: 8 }} 
+                    name="Confidence %"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="mastery" 
+                    stroke="#10b981" 
+                    strokeWidth={3}
+                    name="Concept Mastery %"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+               <div className="flex items-center justify-center h-full text-gray-500 border border-dashed border-[#444] rounded-lg">
+                Not enough data.
+              </div>
+            )}
           </div>
         </div>
 
@@ -227,7 +258,7 @@ function Dashboard({ user }) {
             </div>
           ) : (
             <div className="flex items-center justify-center h-[300px] text-gray-500 border border-dashed border-[#444] rounded-lg">
-              Not enough data. Submit code first.
+              Not enough profile data.
             </div>
           )}
         </div>

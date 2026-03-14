@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { getProfile } from '../api';
 import { User, Mail, Calendar, Award } from 'lucide-react';
+import Loader from '../components/Loader';
 
 function Profile({ user }) {
   const [profileData, setProfileData] = useState(null);
@@ -16,8 +17,6 @@ function Profile({ user }) {
       .finally(() => setLoading(false));
     }
   }, [user]);
-
-  if (loading) return <div className="p-10 flex justify-center"><div className="spinner w-8 h-8" /></div>;
 
   const availableSkillLangs = profileData?.skill_scores 
     ? [...new Set(profileData.skill_scores.map(s => s.language || 'python'))] 
@@ -34,11 +33,13 @@ function Profile({ user }) {
         .filter(s => (s.language || 'python') === activeSkillLang)
         .map(s => ({
           ...s,
-          concept: s.concept.replace(/_/g, " "),
+          concept: s.concept ? s.concept.replace(/_/g, " ") : "Unknown",
         }))
     : [];
 
   const joinDate = user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown';
+
+  if (loading) return <Loader />;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto w-full p-8 bg-[var(--bg-primary)]">
