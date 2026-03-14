@@ -152,6 +152,7 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         code=payload.code,
         language=payload.language,
         result=diagnostic.get("mistake_type", "analysis_completed"),
+        complexity=complexity,
     )
     db.add(submission)
     db.flush()

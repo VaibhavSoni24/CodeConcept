@@ -29,6 +29,7 @@ class Submission(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     result = Column(Text, nullable=False)
     analysis_result = Column(JSON, nullable=True)
+    complexity = Column(JSON, nullable=True)
 
     user = relationship("User", back_populates="submissions")
     concept_errors = relationship("ConceptError", back_populates="submission", cascade="all, delete")
