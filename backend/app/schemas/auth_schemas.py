@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, Field, EmailStr
+from datetime import datetime
 
 
 class RegisterRequest(BaseModel):
@@ -19,6 +20,7 @@ class UserInfo(BaseModel):
     name: str
     email: str
     level: str
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

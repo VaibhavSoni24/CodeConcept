@@ -100,4 +100,9 @@ export async function traceCode(language, code) {
   return res.data;
 }
 
+export async function getKnowledgeRecommendations(userId) {
+  const res = await api.get(`/users/${userId}/knowledge-recommendations`);
+  return res.data;
+}
+
 export default api;

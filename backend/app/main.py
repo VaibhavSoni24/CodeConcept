@@ -9,7 +9,7 @@ from .models import User, Submission, ConceptError
 from .auth_routes import router as auth_router
 
 # Import routers
-from .routes import code_routes, profile_routes, analysis_routes, activity_routes, notes_routes
+from .routes import code_routes, profile_routes, analysis_routes, activity_routes, notes_routes, knowledge_routes
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,6 +29,7 @@ app.include_router(code_routes.router)
 app.include_router(analysis_routes.router)
 app.include_router(activity_routes.router)
 app.include_router(notes_routes.router)
+app.include_router(knowledge_routes.router)
 
 @app.get("/health")
 def health_check():

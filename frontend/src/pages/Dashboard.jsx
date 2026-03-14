@@ -6,7 +6,12 @@ import {
 } from 'recharts';
 import api, { getProfile, getUserSubmissions } from '../api';
 import { Award, Target, Activity as ActivityIcon, Zap } from 'lucide-react';
-import { normalizeAnalysis } from '../utils/normalizeAnalysis';
+import { 
+  computeAverageConfidence, 
+  computeMistakeRate, 
+  buildConfidenceTimeline, 
+  getUserRank 
+} from '../utils/analytics';
 import Loader from '../components/Loader';
 
 function Dashboard({ user }) {
@@ -33,58 +38,28 @@ function Dashboard({ user }) {
       }
     }
     loadData();
-  }, [user]);
+  }, [user?.id]);
 
   // Aggregate stats using normalizeAnalysis
   const stats = useMemo(() => {
     const totalSubmissions = submissions.length;
     
-    // Compute Mistakes & Confidence
-    let totalConfidence = 0;
-    let submissionsWithMistakes = 0;
-
-    submissions.forEach(sub => {
-      const parsed = normalizeAnalysis(sub);
-      totalConfidence += parsed.confidence || 0;
-      if (parsed.mistakes && parsed.mistakes.length > 0) {
-        submissionsWithMistakes += 1;
-      }
-    });
-
-    const avgConfidence = totalSubmissions > 0 ? (totalConfidence / totalSubmissions) : 0;
-    const errorRate = totalSubmissions > 0 ? (submissionsWithMistakes / totalSubmissions) : 0;
-
-    let rank = "Novice";
-    if (totalSubmissions > 50) rank = "Master";
-    else if (totalSubmissions > 20) rank = "Advanced";
-    else if (totalSubmissions > 5) rank = "Intermediate";
+    const avgConfidence = computeAverageConfidence(submissions);
+    const errorRate = computeMistakeRate(submissions);
+    const rank = getUserRank(avgConfidence);
     
     return {
       totalSubmissions,
       avgConfidencePercentage: Math.round(avgConfidence * 100),
       errorRatePercentage: Math.round(errorRate * 100),
       rank,
-      languages: [...new Set(submissions.map(s => s.language))]
+      languages: [...new Set(submissions.map(s => s.language).filter(Boolean))]
     };
   }, [submissions]);
 
   // History for LineChart based on submissions
   const historyData = useMemo(() => {
-    if (!submissions || submissions.length === 0) return [];
-    
-    // Sort chronologically just in case
-    const sortedSubs = [...submissions].sort((a,b) => new Date(a.timestamp || a.created_at) - new Date(b.timestamp || b.created_at));
-    
-    return sortedSubs.map((s, index) => {
-      const parsed = normalizeAnalysis(s);
-      const conf = Math.round((parsed.confidence || 0) * 100);
-      return {
-        name: `Sub ${index + 1}`,
-        date: s.timestamp || s.created_at,
-        confidence: conf,
-        mastery: Math.min(100, Math.round(conf * 1.2)) // proxy for visual
-      };
-    });
+    return buildConfidenceTimeline(submissions);
   }, [submissions]);
 
   // Skill graph data filtered by lang (fallback safely)
@@ -111,6 +86,25 @@ function Dashboard({ user }) {
   }, [profile, activeSkillLang]);
 
   if (loading) return <Loader />;
+
+  if (!loading && submissions.length === 0) {
+    return (
+      <div className="flex flex-col h-full overflow-y-auto w-full p-8 bg-[var(--bg-primary)]">
+        <header className="mb-8 items-end">
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500">
+            Learning Analytics Dashboard
+          </h1>
+        </header>
+        <div className="flex flex-col items-center justify-center h-full w-full text-center slide-up mt-20">
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] p-12 rounded-xl max-w-lg shadow-lg">
+             <Target className="text-gray-400 mx-auto mb-4" size={48} />
+             <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-2">No submissions yet</h2>
+             <p className="text-gray-400 mb-6">Run your first code analysis to see dashboard insights.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto w-full p-8 bg-[var(--bg-primary)]">
@@ -144,16 +138,16 @@ function Dashboard({ user }) {
 
         <div className="card p-6 flex items-center gap-4 border-l-4 border-l-indigo-500">
           <div className="p-3 bg-indigo-500/10 rounded-lg"><Target className="text-indigo-500" size={24}/></div>
-          <div>
-            <p className="text-sm text-gray-400 font-semibold mb-1">Average Confidence</p>
+          <div title="Confidence measures how well the code follows correct programming concepts.">
+            <p className="text-sm text-gray-400 font-semibold mb-1 cursor-help border-b border-dashed border-gray-500 inline-block">Average Confidence</p>
             <p className="text-2xl font-bold">{stats.avgConfidencePercentage}%</p>
           </div>
         </div>
 
         <div className="card p-6 flex items-center gap-4 border-l-4 border-l-red-500">
           <div className="p-3 bg-red-500/10 rounded-lg"><Zap className="text-red-500" size={24}/></div>
-          <div>
-            <p className="text-sm text-gray-400 font-semibold mb-1">Mistake Rate</p>
+          <div title="Percentage of submissions containing conceptual mistakes.">
+            <p className="text-sm text-gray-400 font-semibold mb-1 cursor-help border-b border-dashed border-gray-500 inline-block">Mistake Rate</p>
             <p className="text-2xl font-bold">{stats.errorRatePercentage}%</p>
           </div>
         </div>
@@ -218,21 +212,15 @@ function Dashboard({ user }) {
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold text-[var(--text-primary)]">Current Concept Skills</h3>
             {availableSkillLangs.length > 0 && (
-              <div className="flex gap-1">
-                {availableSkillLangs.map(l => (
-                  <button
-                    key={l}
-                    onClick={() => setActiveSkillLang(l)}
-                    className={`px-2 py-1 text-[0.7rem] uppercase font-bold rounded ${
-                      activeSkillLang === l 
-                        ? 'bg-[var(--accent)] text-white' 
-                        : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {l}
-                  </button>
+              <select
+                value={activeSkillLang}
+                onChange={(e) => setActiveSkillLang(e.target.value)}
+                className="bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] px-3 py-1.5 rounded-lg text-sm outline-none w-32 focus:border-blue-500 transition-colors cursor-pointer"
+              >
+                {availableSkillLangs.map(lang => (
+                  <option key={lang} value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)}</option>
                 ))}
-              </div>
+              </select>
             )}
           </div>
           

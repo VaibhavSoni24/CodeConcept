@@ -5,11 +5,24 @@ import Dashboard from "./pages/Dashboard";
 import EditorPage from "./pages/Editor";
 import Activity from "./pages/Activity";
 import Profile from "./pages/Profile";
+import Knowledge from "./pages/Knowledge";
 import About from "./pages/About";
-import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon } from "lucide-react";
+import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon, BookOpen } from "lucide-react";
+import { getUserSubmissions } from "./api";
+import { computeAverageConfidence, getUserRank } from "./utils/analytics";
 
 function Navigation({ user, onLogout }) {
   const [isLight, setIsLight] = useState(() => document.documentElement.classList.contains('light-theme'));
+  const [computedLevel, setComputedLevel] = useState(user?.level || "Beginner");
+
+  useEffect(() => {
+    if (user?.id) {
+      getUserSubmissions(user.id).then(subs => {
+        const avgConf = computeAverageConfidence(subs);
+        setComputedLevel(getUserRank(avgConf));
+      }).catch(() => {});
+    }
+  }, [user?.id]);
   
   const toggleTheme = () => {
     document.documentElement.classList.toggle('light-theme');
@@ -22,6 +35,7 @@ function Navigation({ user, onLogout }) {
     { path: "/editor", label: "Editor", icon: <Code size={18} /> },
     { path: "/activity", label: "Activity", icon: <ActivityIcon size={18} /> },
     { path: "/profile", label: "Profile", icon: <User size={18} /> },
+    { path: "/knowledge", label: "Knowledge", icon: <BookOpen size={18} /> },
     { path: "/about", label: "About", icon: <Info size={18} /> },
   ];
 
@@ -56,7 +70,7 @@ function Navigation({ user, onLogout }) {
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium">{user.name}</span>
-            <span className="text-xs text-[var(--text-secondary)]">{user.level}</span>
+            <span className="text-xs text-[var(--text-secondary)]">{computedLevel}</span>
           </div>
         </div>
         
@@ -93,6 +107,7 @@ function MainApp({ user, token, handleLogout }) {
             <Route path="/editor" element={<EditorPage user={user} token={token} handleLogout={handleLogout} />} />
             <Route path="/activity" element={<Activity user={user} />} />
             <Route path="/profile" element={<Profile user={user} />} />
+            <Route path="/knowledge" element={<Knowledge user={user} />} />
             <Route path="/about" element={<About />} />
           </Routes>
         </ErrorBoundary>
