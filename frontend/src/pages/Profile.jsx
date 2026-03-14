@@ -1,22 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { getProfile } from '../api';
+import { getProfile, getUserSubmissions } from '../api';
 import { User, Mail, Calendar, Award } from 'lucide-react';
+import { computeAverageConfidence, getUserRank } from '../utils/analytics';
 import Loader from '../components/Loader';
 
 function Profile({ user }) {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeSkillLang, setActiveSkillLang] = useState('python');
+  const [computedLevel, setComputedLevel] = useState(user?.level || 'Beginner');
 
   useEffect(() => {
     if (user?.id) {
-      getProfile(user.id).then(data => {
+      Promise.all([
+        getProfile(user.id),
+        getUserSubmissions(user.id)
+      ]).then(([data, subs]) => {
         setProfileData(data);
+        const avg = computeAverageConfidence(subs);
+        setComputedLevel(getUserRank(avg));
       }).catch(console.error)
       .finally(() => setLoading(false));
     }
-  }, [user]);
+  }, [user?.id]);
 
   const availableSkillLangs = profileData?.skill_scores 
     ? [...new Set(profileData.skill_scores.map(s => s.language || 'python'))] 
@@ -70,7 +77,7 @@ function Profile({ user }) {
             <div className="w-full space-y-3">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-[var(--text-muted)] flex items-center gap-2"><Award size={14}/> Base Level</span>
-                <span className="font-semibold text-[var(--text-primary)] capitalize">{user?.level || 'Beginner'}</span>
+                <span className="font-semibold text-[var(--text-primary)] capitalize">{computedLevel}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-[var(--text-muted)] flex items-center gap-2"><Calendar size={14}/> Joined</span>

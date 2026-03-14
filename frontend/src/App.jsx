@@ -7,9 +7,21 @@ import Activity from "./pages/Activity";
 import Profile from "./pages/Profile";
 import About from "./pages/About";
 import { LogOut, Home, Code, Activity as ActivityIcon, User, Info, Sun, Moon } from "lucide-react";
+import { getUserSubmissions } from "./api";
+import { computeAverageConfidence, getUserRank } from "./utils/analytics";
 
 function Navigation({ user, onLogout }) {
   const [isLight, setIsLight] = useState(() => document.documentElement.classList.contains('light-theme'));
+  const [computedLevel, setComputedLevel] = useState(user?.level || "Beginner");
+
+  useEffect(() => {
+    if (user?.id) {
+      getUserSubmissions(user.id).then(subs => {
+        const avgConf = computeAverageConfidence(subs);
+        setComputedLevel(getUserRank(avgConf));
+      }).catch(() => {});
+    }
+  }, [user?.id]);
   
   const toggleTheme = () => {
     document.documentElement.classList.toggle('light-theme');
@@ -56,7 +68,7 @@ function Navigation({ user, onLogout }) {
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium">{user.name}</span>
-            <span className="text-xs text-[var(--text-secondary)]">{user.level}</span>
+            <span className="text-xs text-[var(--text-secondary)]">{computedLevel}</span>
           </div>
         </div>
         
