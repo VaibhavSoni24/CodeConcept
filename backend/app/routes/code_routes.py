@@ -28,6 +28,7 @@ from ..services.complexity_analyzer import analyze_complexity
 from ..services.concept_detector import detect_concepts
 from ..services.execution_tracer import run_execution_trace
 from ..services.flow_graph import build_flow_graph
+from ..services.analysis_service import dispatch_analysis
 
 from ..services.execution_service import execute_code
 from ..services.formatting_service import parse_and_format_code
@@ -92,8 +93,12 @@ def format_code(payload: RunCodeRequest, _current_user: User = Depends(get_curre
 @router.post("/trace")
 def trace_code(payload: RunCodeRequest, _current_user: User = Depends(get_current_user)):
     """Return step-by-step execution trace for the given code."""
+    is_python = payload.language.lower() == "python"
+    if not is_python:
+        return {"trace_available": False, "trace": []}
+    
     trace = run_execution_trace(payload.code)
-    return {"trace": trace}
+    return {"trace_available": True, "trace": trace}
 
 
 @router.post("/submit-code")
@@ -102,34 +107,33 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     if user is None:
         raise HTTPException(status_code=404, detail="User not found. Create user first.")
 
-    is_python = payload.language.lower() == "python"
+    # --- Run all analyzers via language dispatcher ---
+    try:
+        analysis_data = dispatch_analysis(payload.language, payload.code)
+        
+        analysis = analysis_data["analysis"]
+        misconceptions = analysis_data["misconceptions"]
+        code_smells = analysis_data["code_smells"]
+        complexity = analysis_data["complexity"]
+        concepts_detected = analysis_data["concepts_detected"]
+        flow_graph = analysis_data["flow_graph"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Code analysis failed: {str(e)}")
 
-    # --- Run all analyzers ---
-    if is_python:
-        analysis = run_static_analysis(payload.code)
-        misconceptions = detect_misconceptions(payload.code) if analysis["syntax"] == "ok" else []
-        code_smells = detect_code_smells(payload.code) if analysis["syntax"] == "ok" else []
-        complexity = analyze_complexity(payload.code)
-        concepts_detected = detect_concepts(payload.code) if analysis["syntax"] == "ok" else []
-        flow_graph = build_flow_graph(payload.code) if analysis["syntax"] == "ok" else {"nodes": [], "edges": [], "mermaid": ""}
-        issues = map_analysis_to_issues(analysis, misconceptions)
-    else:
-        analysis = {"syntax": "ok", "syntax_error": None, "ast_flags": []}
-        misconceptions = []
-        code_smells = []
-        complexity = {"cyclomatic_complexity": 0}
-        concepts_detected = []
-        flow_graph = {"nodes": [], "edges": [], "mermaid": ""}
-        issues = map_analysis_to_issues(analysis, [])
+    issues = map_analysis_to_issues(analysis, misconceptions)
 
     # AI diagnostics + refactoring suggestions
     ai_context = {
         "student_code": payload.code,
+        "language": payload.language,
         "error_logs": analysis.get("syntax_error") or {},
         "ast_analysis": analysis,
         "student_history": get_profile_summary(db, payload.user_id),
     }
-    diagnostic = generate_diagnostic_with_ai(ai_context, issues[0], code_smells)
+    try:
+        diagnostic = generate_diagnostic_with_ai(ai_context, issues[0], code_smells)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Diagnostic generation failed: {str(e)}")
 
     # Calculate code similarity
     from ..services.similarity_service import check_code_similarity

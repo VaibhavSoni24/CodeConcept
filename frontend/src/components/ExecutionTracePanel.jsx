@@ -3,6 +3,22 @@ import { useState } from "react";
 function ExecutionTracePanel({ trace }) {
   const [currentStep, setCurrentStep] = useState(0);
 
+  if (trace?.notAvailable) {
+    return (
+      <div className="card card-glow">
+        <div className="card-header">
+          <h2>
+            <span className="card-icon green">🔍</span>
+            Execution Trace
+          </h2>
+        </div>
+        <p className="feedback-empty">
+          Tracing is currently only supported for Python.
+        </p>
+      </div>
+    );
+  }
+
   if (!trace || trace.length === 0) {
     return (
       <div className="card card-glow">

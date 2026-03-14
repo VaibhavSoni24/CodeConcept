@@ -1,19 +1,23 @@
 import Editor from "@monaco-editor/react";
 
-function CodeEditor({ code, onChange }) {
+function CodeEditor({ code, onChange, language = "python" }) {
+  const displayLang = language === "javascript" ? "JavaScript" : 
+                      language === "cpp" ? "C++" : 
+                      language.charAt(0).toUpperCase() + language.slice(1);
+
   return (
-    <div className="card card-glow">
-      <div className="card-header">
+    <div className="card card-glow h-full flex flex-col">
+      <div className="card-header shrink-0">
         <h2>
           <span className="card-icon purple">⌨</span>
           Code Editor
         </h2>
-        <span className="chip chip-python">● Python</span>
+        <span className={`chip chip-${language}`}>● {displayLang}</span>
       </div>
-      <div className="editor-wrapper">
+      <div className="editor-wrapper flex-1 min-h-0">
         <Editor
-          height="400px"
-          language="python"
+          height="100%"
+          language={language}
           theme="vs-dark"
           value={code}
           onChange={(value) => onChange(value || "")}

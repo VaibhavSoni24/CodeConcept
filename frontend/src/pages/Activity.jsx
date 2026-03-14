@@ -55,11 +55,11 @@ function Activity({ user }) {
   const currentNotes = allNotes.filter(n => n.submission_id === selectedSub?.id);
 
   return (
-    <div className="flex h-full w-full bg-[#151521] overflow-hidden">
+    <div className="flex h-full w-full bg-[var(--bg-primary)] overflow-hidden">
       {/* Left Sidebar: Submission List */}
-      <div className="w-1/3 border-r border-[#333] flex flex-col h-full bg-[#1a1a24]">
-        <div className="p-6 border-b border-[#333]">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+      <div className="w-1/3 border-r border-[var(--border)] flex flex-col h-full bg-[var(--bg-secondary)]">
+        <div className="p-6 border-b border-[var(--border)]">
+          <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
             <Clock className="text-indigo-400" />
             Activity History
           </h2>
@@ -76,8 +76,8 @@ function Activity({ user }) {
                 onClick={() => setSelectedSub(sub)}
                 className={`p-4 rounded-xl cursor-pointer transition-all border ${
                   selectedSub?.id === sub.id 
-                    ? "bg-[#2a2a3c] border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.1)]" 
-                    : "bg-[#1e1e2d] border-[#333] hover:border-[#555]"
+                    ? "bg-[var(--bg-card)] border-[var(--accent)] shadow-[0_0_15px_var(--accent-glow)]" 
+                    : "bg-[var(--bg-card)] border-[var(--border)] hover:border-[var(--border-hover)]"
                 }`}
               >
                 <div className="flex justify-between items-center mb-2">
@@ -90,7 +90,7 @@ function Activity({ user }) {
                     })}
                   </span>
                 </div>
-                <div className="text-sm font-semibold text-gray-200 mt-2 truncate w-full">
+                <div className="text-sm font-semibold text-[var(--text-primary)] mt-2 truncate w-full">
                   {sub.result}
                 </div>
               </div>
@@ -103,10 +103,10 @@ function Activity({ user }) {
       <div className="flex-1 flex flex-col h-full p-6 overflow-y-auto">
         {selectedSub ? (
           <div className="slide-up max-w-4xl w-full mx-auto space-y-6">
-            <header className="flex justify-between items-end border-b border-[#333] pb-4">
+            <header className="flex justify-between items-end border-b border-[var(--border)] pb-4">
               <div>
-                <h1 className="text-2xl font-bold text-white">Submission #{selectedSub.id}</h1>
-                <p className="text-gray-400 text-sm mt-1">
+                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Submission #{selectedSub.id}</h1>
+                <p className="text-[var(--text-secondary)] text-sm mt-1">
                   Analysis detected: <span className="text-indigo-400">{selectedSub.result}</span>
                 </p>
               </div>
@@ -114,9 +114,9 @@ function Activity({ user }) {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="card h-full">
-                <div className="card-header bg-[#222232] border-b border-[#333] flex items-center gap-2">
+                <div className="card-header bg-[var(--bg-secondary)] border-b border-[var(--border)] flex items-center gap-2">
                   <Code size={16} className="text-blue-400" />
-                  <h3 className="m-0 font-semibold text-white">Source Code</h3>
+                  <h3 className="m-0 font-semibold text-[var(--text-primary)]">Source Code</h3>
                 </div>
                 <div className="h-[400px]">
                   <CodeEditor 
@@ -129,11 +129,11 @@ function Activity({ user }) {
 
               <div className="flex flex-col gap-6">
                 <div className="card flex-1">
-                  <div className="card-header bg-[#222232] border-b border-[#333]">
-                    <h3 className="m-0 font-semibold text-white">AI Diagnostic Feedback</h3>
+                  <div className="card-header bg-[var(--bg-secondary)] border-b border-[var(--border)]">
+                    <h3 className="m-0 font-semibold text-[var(--text-primary)]">AI Diagnostic Feedback</h3>
                   </div>
                   <div className="p-6">
-                    <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">
+                    <p className="text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
                       {selectedSub.analysis_result || "No detailed feedback recorded for this execution."}
                     </p>
                   </div>
@@ -141,17 +141,17 @@ function Activity({ user }) {
 
                 {/* Notes Section */}
                 <div className="card flex-1 flex flex-col">
-                  <div className="card-header bg-[#222232] border-b border-[#333] flex items-center gap-2">
+                  <div className="card-header bg-[var(--bg-secondary)] border-b border-[var(--border)] flex items-center gap-2">
                     <BookOpen size={16} className="text-amber-400" />
-                    <h3 className="m-0 font-semibold text-white">My Notes (Markdown)</h3>
+                    <h3 className="m-0 font-semibold text-[var(--text-primary)]">My Notes (Markdown)</h3>
                   </div>
-                  <div className="p-4 flex-1 flex flex-col bg-[#1a1a24]">
+                  <div className="p-4 flex-1 flex flex-col bg-[var(--bg-primary)]">
                     <div className="flex-1 overflow-y-auto space-y-4 mb-4">
                       {currentNotes.length === 0 ? (
                         <p className="text-gray-500 text-sm italic">No notes for this submission.</p>
                       ) : (
                         currentNotes.map(note => (
-                          <div key={note.id} className="p-3 bg-[#2a2a3c] rounded-lg text-sm text-gray-300 whitespace-pre-wrap border border-[#444]">
+                          <div key={note.id} className="p-3 bg-[var(--bg-card)] rounded-lg text-sm text-[var(--text-secondary)] whitespace-pre-wrap border border-[var(--border)]">
                             {note.content}
                           </div>
                         ))
@@ -159,7 +159,7 @@ function Activity({ user }) {
                     </div>
                     <div className="flex gap-2">
                       <textarea
-                        className="flex-1 bg-[#151521] border border-[#333] rounded-lg p-3 text-sm text-gray-200 resize-none outline-none focus:border-indigo-500"
+                        className="flex-1 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-3 text-sm text-[var(--text-primary)] resize-none outline-none focus:border-[var(--accent)]"
                         placeholder="Add a reflective note on what you learned or struggled with..."
                         rows={2}
                         value={newNote}

@@ -95,8 +95,8 @@ export async function createNote(submissionId, content) {
   return res.data;
 }
 
-export async function traceCode(code) {
-  const res = await api.post("/trace", { code });
+export async function traceCode(language, code) {
+  const res = await api.post("/trace", { language, code });
   return res.data;
 }
 

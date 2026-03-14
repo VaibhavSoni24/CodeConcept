@@ -14,7 +14,7 @@ import ASTGraph from "../components/ASTGraph";
 import SkillRadarChart from "../components/SkillRadarChart";
 import RefactoringPanel from "../components/RefactoringPanel";
 import { runCode, submitCode, traceCode, getProfile, formatCode } from "../api";
-import { Upload, FileCode } from "lucide-react";
+import { Upload, FileCode, Trash2 } from "lucide-react";
 
 const SUPPORTED_LANGUAGES = [
   { id: "python", label: "Python", ext: ".py" },
@@ -136,17 +136,16 @@ function EditorPage({ user, token, handleLogout }) {
     setLoading("analyze");
     setError("");
     try {
-      if (language === "python") {
-        const [result, traceResult] = await Promise.all([
-          submitCode(Number(user.id), language, code),
-          traceCode(code),
-        ]);
-        setFeedback(result);
+      const [result, traceResult] = await Promise.all([
+        submitCode(Number(user.id), language, code),
+        traceCode(language, code),
+      ]);
+      setFeedback(result);
+      
+      if (traceResult.trace_available) {
         setExecutionTrace(traceResult.trace);
       } else {
-        const result = await submitCode(Number(user.id), language, code);
-        setFeedback(result);
-        setExecutionTrace(null);
+        setExecutionTrace({ notAvailable: true });
       }
     } catch (err) {
       if (err.response?.status === 401) {
@@ -161,13 +160,13 @@ function EditorPage({ user, token, handleLogout }) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden max-h-screen">
-      <header className="px-6 py-3 border-b border-[#333] flex items-center justify-between bg-[#1e1e2d]">
+      <header className="px-6 py-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold">Workspace</h1>
           <select 
             value={language}
             onChange={handleLanguageChange}
-            className="bg-[#2a2a3c] border border-[#444] text-sm text-gray-200 rounded px-2 py-1 outline-none"
+            className="bg-[var(--bg-card)] border border-[var(--border)] text-sm text-[var(--text-primary)] rounded px-2 py-1 outline-none"
           >
             {SUPPORTED_LANGUAGES.map(l => (
               <option key={l.id} value={l.id}>{l.label}</option>
@@ -191,11 +190,18 @@ function EditorPage({ user, token, handleLogout }) {
           </button>
           
           <button 
-            className="flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-colors ml-2"
+            className="flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors ml-2"
             onClick={handleFormat}
             disabled={!!loading}
           >
             <FileCode size={16} /> Format Code
+          </button>
+
+          <button 
+            className="flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-red-400 transition-colors ml-2"
+            onClick={() => setCode("")}
+          >
+            <Trash2 size={16} /> Clear
           </button>
         </div>
       </header>
@@ -218,7 +224,7 @@ function EditorPage({ user, token, handleLogout }) {
       <main className="grid-layout flex-1 p-4 gap-6 h-[calc(100vh-4rem)] overflow-hidden">
         {/* ---- Left Column ---- */}
         <section className="flex flex-col gap-4 overflow-hidden h-full min-h-0">
-          <div className="flex-1 rounded-xl overflow-hidden border border-[#333] min-h-0">
+          <div className="flex-1 rounded-xl overflow-hidden border border-[var(--border)] min-h-0">
             <CodeEditor code={code} onChange={setCode} language={language === "python" ? "python" : language} />
           </div>
 

@@ -15,5 +15,5 @@ def get_user_submissions(user_id: int, db: Session = Depends(get_db), current_us
         "language": s.language, 
         "result": s.result, 
         "timestamp": s.timestamp.isoformat(), 
-        "analysis_result": s.analysis_result
+        "analysis_result": s.analysis_result if s.analysis_result else {}
     } for s in submissions]

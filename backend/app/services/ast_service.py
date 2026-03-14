@@ -18,6 +18,7 @@ def normalize_python_ast(node: py_ast.AST) -> Dict[str, Any]:
     """Recursively converts a standard Python AST node into normalized JSON format."""
     result = {
         "type": node.__class__.__name__,
+        "label": getattr(node, "name", getattr(node, "id", getattr(node, "arg", ""))),
         "line": getattr(node, "lineno", None),
         "children": []
     }
@@ -29,18 +30,25 @@ def normalize_python_ast(node: py_ast.AST) -> Dict[str, Any]:
 
 def normalize_ts_ast(node) -> Dict[str, Any]:
     """Recursively converts a Tree-sitter Node into normalized JSON format."""
-    # node.start_point is a tuple (row, column). Row is 0-indexed.
     line_num = node.start_point[0] + 1 if hasattr(node, "start_point") else None
     
+    label_text = ""
+    try:
+        if node.is_named and not node.children:
+            label_text = node.text.decode("utf8")
+    except:
+        pass
+
     result = {
         "type": node.type,
+        "label": label_text,
         "line": line_num,
         "children": []
     }
     
     for i in range(node.child_count):
         child = node.child(i)
-        if child.is_named:  # only include named nodes (ignoring string literals like '{', '(', etc for structural cleanliness)
+        if child.is_named:
             result["children"].append(normalize_ts_ast(child))
             
     return result
@@ -64,7 +72,7 @@ def get_ts_language(lang: str):
     
     lang_mod = lang_map.get(lang.lower())
     if lang_mod:
-        return tree_sitter.Language(lang_mod, lang.lower())
+        return tree_sitter.Language(lang_mod)
     return None
 
 def parse_ast(language: str, code: str) -> Dict[str, Any]:
@@ -83,8 +91,7 @@ def parse_ast(language: str, code: str) -> Dict[str, Any]:
     if TS_AVAILABLE:
         ts_lang = get_ts_language(lang)
         if ts_lang:
-            parser = tree_sitter.Parser()
-            parser.set_language(ts_lang)
+            parser = tree_sitter.Parser(ts_lang)
             
             # tree-sitter expects bytes
             tree = parser.parse(bytes(code, "utf8"))

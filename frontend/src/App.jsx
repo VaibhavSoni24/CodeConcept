@@ -26,10 +26,10 @@ function Navigation({ user, onLogout }) {
   ];
 
   return (
-    <nav className="sidebar h-screen bg-[#1e1e2d] w-64 flex flex-col fixed left-0 top-0 border-r border-[#333]">
-      <div className="p-6 border-b border-[#333]">
-        <h1 className="text-xl font-bold text-white tracking-wide">CodeConcept</h1>
-        <div className="text-xs text-blue-400 mt-1">AI Learning Engine</div>
+    <nav className="sidebar h-screen bg-[var(--bg-secondary)] w-64 flex flex-col fixed left-0 top-0 border-r border-[var(--border)]">
+      <div className="p-6 border-b border-[var(--border)]">
+        <h1 className="text-xl font-bold tracking-wide text-[var(--text-primary)]">CodeConcept</h1>
+        <div className="text-xs text-blue-500 mt-1">AI Learning Engine</div>
       </div>
       
       <div className="flex-1 py-6 flex flex-col gap-2 px-4">
@@ -39,8 +39,8 @@ function Navigation({ user, onLogout }) {
             to={item.path}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               location.pathname === item.path 
-                ? "bg-blue-600/20 text-blue-400 border border-blue-500/30" 
-                : "text-gray-400 hover:text-white hover:bg-[#2a2a3c]"
+                ? "bg-blue-600/10 text-blue-500 border border-blue-500/20 shadow-sm" 
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card)]"
             }`}
           >
             {item.icon}
@@ -49,14 +49,14 @@ function Navigation({ user, onLogout }) {
         ))}
       </div>
 
-      <div className="p-4 border-t border-[#333]">
-        <div className="flex items-center gap-3 px-4 py-2 mb-2 text-gray-300">
-          <div className="w-8 h-8 rounded-full bg-[#2a2a3c] flex items-center justify-center font-bold text-blue-400">
+      <div className="p-4 border-t border-[var(--border)]">
+        <div className="flex items-center gap-3 px-4 py-2 mb-2 text-[var(--text-primary)]">
+          <div className="w-8 h-8 rounded-full bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-center font-bold text-blue-500">
             {user?.name?.[0]?.toUpperCase()}
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-medium">{user.name}</span>
-            <span className="text-xs text-gray-500">{user.level}</span>
+            <span className="text-xs text-[var(--text-secondary)]">{user.level}</span>
           </div>
         </div>
         
@@ -82,7 +82,7 @@ function Navigation({ user, onLogout }) {
 
 function MainApp({ user, token, handleLogout }) {
   return (
-    <div className="flex min-h-screen bg-[#151521] text-gray-200 font-sans">
+    <div className="flex min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
       <Navigation user={user} onLogout={handleLogout} />
       <main className="flex-1 ml-64 min-h-screen relative overflow-x-hidden">
         <Routes>

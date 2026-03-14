@@ -70,6 +70,8 @@ def generate_diagnostic_with_ai(
 You are an educational coding tutor. Diagnose the conceptual misunderstanding and do not reveal the full solution.
 
 Input:
+Language: {payload.get('language', 'python')}
+
 student_code:
 {payload.get('student_code', '')}
 
