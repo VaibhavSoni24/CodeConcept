@@ -69,3 +69,16 @@ class ConceptSkill(Base):
     last_updated = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class Note(Base):
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    analysis_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    submission = relationship("Submission")

@@ -46,17 +46,27 @@ export async function getMe() {
 }
 
 // ---------- Existing ----------
-export async function runCode(code) {
-  const res = await api.post("/run-code", { code });
+export async function runCode(language, code) {
+  const res = await api.post("/run-code", { language, code });
   return res.data;
 }
 
-export async function submitCode(userId, code) {
+export async function submitCode(userId, language, code) {
   const res = await api.post("/submit-code", {
     user_id: userId,
-    language: "python",
+    language,
     code,
   });
+  return res.data;
+}
+
+export async function formatCode(language, code) {
+  const res = await api.post("/format-code", { language, code });
+  return res.data;
+}
+
+export async function getASTGraph(language, code) {
+  const res = await api.post("/ast-graph", { language, code });
   return res.data;
 }
 
@@ -67,6 +77,21 @@ export async function createUser(name, email, level) {
 
 export async function getProfile(userId) {
   const res = await api.get(`/profiles/${userId}`);
+  return res.data;
+}
+
+export async function getUserSubmissions(userId) {
+  const res = await api.get(`/users/${userId}/submissions`);
+  return res.data;
+}
+
+export async function getNotes(userId) {
+  const res = await api.get(`/users/${userId}/notes`);
+  return res.data;
+}
+
+export async function createNote(submissionId, content) {
+  const res = await api.post("/notes", { submission_id: submissionId, content });
   return res.data;
 }
 

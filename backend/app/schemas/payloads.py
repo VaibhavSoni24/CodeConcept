@@ -11,6 +11,7 @@ class SubmitCodeRequest(BaseModel):
 
 class RunCodeRequest(BaseModel):
     code: str = Field(..., min_length=1)
+    language: str = Field(default="python")
 
 
 class CreateUserRequest(BaseModel):

@@ -10,9 +10,13 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@reactflow/node-resizer": "^2.2.14",
     "axios": "^1.11.0",
+    "lucide-react": "^0.577.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.1",
+    "reactflow": "^11.11.4",
     "recharts": "^3.8.0"
   },
   "devDependencies": {
