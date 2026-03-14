@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { getProfile, getUserSubmissions } from '../api';
+import { getProfile, getUserSubmissions, getMe } from '../api';
 import { User, Mail, Calendar, Award } from 'lucide-react';
 import { computeAverageConfidence, getUserRank } from '../utils/analytics';
 import Loader from '../components/Loader';
@@ -11,15 +11,19 @@ function Profile({ user }) {
   const [activeSkillLang, setActiveSkillLang] = useState('python');
   const [computedLevel, setComputedLevel] = useState(user?.level || 'Beginner');
 
+  const [fullUser, setFullUser] = useState(user);
+
   useEffect(() => {
     if (user?.id) {
       Promise.all([
         getProfile(user.id),
-        getUserSubmissions(user.id)
-      ]).then(([data, subs]) => {
+        getUserSubmissions(user.id),
+        getMe()
+      ]).then(([data, subs, meData]) => {
         setProfileData(data);
         const avg = computeAverageConfidence(subs);
         setComputedLevel(getUserRank(avg));
+        if (meData) setFullUser(meData);
       }).catch(console.error)
       .finally(() => setLoading(false));
     }
@@ -44,7 +48,7 @@ function Profile({ user }) {
         }))
     : [];
 
-  const joinDate = user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown';
+  const joinDate = fullUser?.created_at ? new Date(fullUser.created_at).toLocaleDateString() : 'Unknown';
 
   if (loading) return <Loader />;
 
@@ -92,21 +96,15 @@ function Profile({ user }) {
                 Aggregate Concept Mastery
               </h3>
               {availableSkillLangs.length > 0 && (
-                <div className="flex gap-1">
-                  {availableSkillLangs.map(l => (
-                    <button
-                      key={l}
-                      onClick={() => setActiveSkillLang(l)}
-                      className={`px-2 py-1 text-[0.7rem] uppercase font-bold rounded ${
-                        activeSkillLang === l 
-                          ? 'bg-[var(--accent)] text-white' 
-                          : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      {l}
-                    </button>
+                <select
+                  value={activeSkillLang}
+                  onChange={(e) => setActiveSkillLang(e.target.value)}
+                  className="bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] px-3 py-1.5 rounded-lg text-sm outline-none w-32 focus:border-blue-500 transition-colors cursor-pointer"
+                >
+                  {availableSkillLangs.map(lang => (
+                    <option key={lang} value={lang}>{lang.charAt(0).toUpperCase() + lang.slice(1)}</option>
                   ))}
-                </div>
+                </select>
               )}
             </div>
             
