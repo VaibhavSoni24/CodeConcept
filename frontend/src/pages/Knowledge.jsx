@@ -174,7 +174,54 @@ function Knowledge({ user }) {
                Recommended Learning Videos
             </h2>
           </div>
-          <VideoRecommendations videos={youtube_recommendations} />
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            {youtube_recommendations.map((vid, idx) => {
+              const isSearchLink = !vid.video_id;
+              return (
+                <a
+                  key={idx}
+                  href={vid.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="card overflow-hidden group hover:-translate-y-1 transition-transform duration-200 block"
+                >
+                  <div className="relative aspect-video bg-gradient-to-br from-gray-900 to-gray-800 border-b border-[var(--border)] flex items-center justify-center">
+                    {!isSearchLink ? (
+                      <>
+                        <img
+                          src={vid.thumbnail}
+                          alt={vid.title}
+                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity absolute inset-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
+                          <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-4 h-4 ml-0.5"><path d="M8 5v14l11-7z"/></svg>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 p-2 text-center">
+                        <div className="w-8 h-8 bg-red-600/80 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-4 h-4"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </div>
+                        <span className="text-[0.6rem] text-gray-400">Search YouTube</span>
+                      </div>
+                    )}
+                    <div className="absolute top-1 right-1 bg-indigo-600/90 text-white text-[0.55rem] uppercase font-bold px-1.5 py-0.5 rounded">
+                      {vid.concept}
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-tight mb-1 group-hover:text-indigo-400 transition-colors">
+                      {vid.title}
+                    </h4>
+                    <span className="text-[0.65rem] text-[var(--text-secondary)]">{vid.channel}</span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
         </section>
         
       </div>

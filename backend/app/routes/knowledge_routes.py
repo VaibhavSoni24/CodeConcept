@@ -13,14 +13,7 @@ def get_knowledge_recommendations(user_id: int, db: Session = Depends(get_db)):
     # 1. Fetch total skill scores for the user across all languages
     skills = db.query(ConceptSkill).filter(ConceptSkill.user_id == user_id).all()
     
-    # Optional logic: If empty, we can handle it frontend side.
-    if not skills:
-        return {
-            "languages": {},
-            "concepts_learned": [],
-            "youtube_recommendations": []
-        }
-    
+    # Allow empty skills to fall through to populate unvisited conceptual paths.
     # 2. Re-calculate actual 0-100 percentage if not natively correct & Group by language
     languages_dict: Dict[str, Any] = {}
     
@@ -68,12 +61,32 @@ def get_knowledge_recommendations(user_id: int, db: Session = Depends(get_db)):
          })
          
     # 4. Filter lowest-scoring concepts for Youtube API
-    # Sort by holistic score ascending
+    CORE_CONCEPTS = [
+        "Variables", "Loops", "Conditionals", "Functions", 
+        "Data Structures", "Recursion", "Error Handling", 
+        "Object Oriented Programming"
+    ]
+    
+    visited_concepts = [c["concept"] for c in concepts_learned]
+    unvisited = [c for c in CORE_CONCEPTS if c not in visited_concepts]
+    
+    # Sort by holistic score ascending to find weakest
     sorted_concepts = sorted(concepts_learned, key=lambda x: x["score"])
     
-    target_concepts = [c["concept"] for c in sorted_concepts[:2]] # Take 2 weakest 
+    # Target unvisited first, then low scoring (< 70)
+    weak_concepts = [str(c["concept"]) for c in sorted_concepts if int(str(c["score"])) < 70]
     
-    videos = get_learning_videos(target_concepts)
+    # De-duplicate while preserving order
+    target_concepts: List[str] = []
+    for c in (unvisited + weak_concepts):
+        if c not in target_concepts:
+            target_concepts.append(c)
+            
+    # If perfect score and all core visited, fallback to DSA default
+    if not target_concepts:
+        target_concepts = ["Data Structures and Algorithms"]
+        
+    videos = get_learning_videos(target_concepts, max_total=5)
     
     return {
         "languages": languages_dict,
