@@ -3,7 +3,8 @@ import { useState } from "react";
 function ExecutionTracePanel({ trace }) {
   const [currentStep, setCurrentStep] = useState(0);
 
-  if (trace?.notAvailable) {
+  // No trace submitted yet
+  if (!trace) {
     return (
       <div className="card card-glow">
         <div className="card-header">
@@ -13,7 +14,7 @@ function ExecutionTracePanel({ trace }) {
           </h2>
         </div>
         <p className="feedback-empty">
-          Tracing is currently only supported for Python.
+          Submit code to see step-by-step execution trace.
         </p>
       </div>
     );

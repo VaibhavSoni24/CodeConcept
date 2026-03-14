@@ -92,12 +92,8 @@ def format_code(payload: RunCodeRequest, _current_user: User = Depends(get_curre
 
 @router.post("/trace")
 def trace_code(payload: RunCodeRequest, _current_user: User = Depends(get_current_user)):
-    """Return step-by-step execution trace for the given code."""
-    is_python = payload.language.lower() == "python"
-    if not is_python:
-        return {"trace_available": False, "trace": []}
-    
-    trace = run_execution_trace(payload.code)
+    """Return step-by-step execution trace for the given code (all languages)."""
+    trace = run_execution_trace(payload.code, payload.language)
     return {"trace_available": True, "trace": trace}
 
 
