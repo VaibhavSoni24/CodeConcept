@@ -32,11 +32,12 @@ export function buildConfidenceTimeline(submissions) {
   return sortedSubs.map((s, index) => {
     const parsed = normalizeAnalysis(s);
     const conf = Math.round((parsed.confidence || 0) * 100);
+    const mastery = Math.round(Math.max(0, Math.min(100, parsed.conceptUsageScore ?? conf)));
     return {
       name: `Sub ${index + 1}`,
       date: new Date(s.timestamp || s.created_at).toLocaleDateString(),
       confidence: conf,
-      mastery: Math.min(100, Math.round(conf * 1.2)) // proxy for visual
+      mastery,
     };
   });
 }

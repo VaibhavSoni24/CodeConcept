@@ -37,6 +37,51 @@ router = APIRouter(tags=["code"])
 rules = load_rules()
 
 
+def _canonicalize_error_concepts(issues: List[Dict[str, Any]]) -> List[str]:
+    """Map issue-level concepts to canonical detector concepts for skill scoring."""
+    mistake_to_detected = {
+        "possible_infinite_loop": {"loops"},
+        "inefficient_index_loop": {"loops"},
+        "off_by_one_range": {"loops"},
+        "modify_while_iterating": {"loops"},
+        "recursion_no_base_case": {"recursion", "functions"},
+        "bare_except": {"exception_handling"},
+        "mutable_default_arg": {"functions"},
+        "string_concat_loop": {"loops"},
+        "inefficient_nested_loop": {"loops"},
+    }
+
+    concept_text_to_detected = {
+        "loop termination condition": {"loops"},
+        "pythonic iteration": {"loops"},
+        "array indexing": {"loops"},
+        "recursion fundamentals": {"recursion", "functions"},
+        "exception handling": {"exception_handling"},
+        "iteration mutation": {"loops"},
+        "mutable defaults": {"functions"},
+        "string performance": {"loops"},
+    }
+
+    error_concepts: set[str] = set()
+    for issue in issues:
+        if issue.get("mistake_type") == "none":
+            continue
+
+        mistake_id = str(issue.get("mistake_id", "")).strip().lower()
+        if mistake_id in mistake_to_detected:
+            error_concepts.update(mistake_to_detected[mistake_id])
+
+        concept_text = str(issue.get("concept", "")).strip().lower()
+        if concept_text in concept_text_to_detected:
+            error_concepts.update(concept_text_to_detected[concept_text])
+
+        normalized = concept_text.replace(" ", "_")
+        if normalized:
+            error_concepts.add(normalized)
+
+    return sorted(error_concepts)
+
+
 def map_analysis_to_issues(analysis: Dict[str, Any], misconceptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     issues: List[Dict[str, Any]] = []
 
@@ -222,7 +267,7 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
             )
 
     # Update profiles
-    error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
+    error_concepts = _canonicalize_error_concepts(issues)
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
     update_skill_scores(
         db,

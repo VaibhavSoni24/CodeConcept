@@ -80,14 +80,20 @@ def get_profile_summary(db: Session, user_id: int):
     """Return learning profiles, enriched with the numeric score from ConceptSkill."""
     profiles = db.query(LearningProfile).filter(LearningProfile.user_id == user_id).all()
 
-    # Build a lookup: concept → score from ConceptSkill
+    # Build a lookup: concept -> averaged score across languages.
     skill_rows = db.query(ConceptSkill).filter(ConceptSkill.user_id == user_id).all()
-    skill_score_map: Dict[str, int] = {}
+    skill_totals: Dict[str, Dict[str, int]] = {}
     for s in skill_rows:
         key = s.concept.lower()
-        # Keep the highest score across languages for simplicity
-        if key not in skill_score_map or s.score > skill_score_map[key]:
-            skill_score_map[key] = s.score
+        if key not in skill_totals:
+            skill_totals[key] = {"sum": 0, "count": 0}
+        skill_totals[key]["sum"] += int(s.score or 0)
+        skill_totals[key]["count"] += 1
+
+    skill_score_map: Dict[str, int] = {}
+    for key, agg in skill_totals.items():
+        count = max(agg["count"], 1)
+        skill_score_map[key] = int(round(agg["sum"] / count))
 
     result = []
     for profile in profiles:

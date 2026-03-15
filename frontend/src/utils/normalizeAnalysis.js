@@ -15,6 +15,11 @@ export function normalizeAnalysis(submission) {
 
   return {
     confidence: result?.confidence || 0,
+    score: typeof result?.score === 'number' ? result.score : (result?.confidence || 0) * 100,
+    conceptUsageScore:
+      typeof result?.concept_usage_score === 'number'
+        ? result.concept_usage_score
+        : (typeof result?.score === 'number' ? result.score : (result?.confidence || 0) * 100),
     mistakes: result?.mistakes || [],
     complexity: result?.complexity || {}
   };
