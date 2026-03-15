@@ -110,6 +110,10 @@ function Activity({ user }) {
                     <span>{sub.result || "Analyzed"}</span>
                     <span className="text-xs text-indigo-400">Conf: {Math.round(analysis.confidence * 100)}%</span>
                   </div>
+                  <div className="mt-2 text-xs text-[var(--text-secondary)] flex justify-between gap-2">
+                    <span className="truncate">{sub.file_name || "untitled"}</span>
+                    <span>edits: {sub.edit_count ?? 0}</span>
+                  </div>
                 </div>
               );
             })

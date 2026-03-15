@@ -7,6 +7,7 @@ from .analyzers.rust_analyzer import run_rust_analysis
 from .analyzers.base import get_empty_analysis
 from .complexity_analyzer import analyze_complexity_for_language
 from .vulnerability_analyzer import analyze_vulnerabilities
+from .flow_graph import build_flow_graph
 
 
 def dispatch_analysis(language: str, code: str):
@@ -31,6 +32,7 @@ def dispatch_analysis(language: str, code: str):
     # override it here so the full metric set (loc, time_complexity, etc.) is
     # always present regardless of which individual analyzer was executed.
     res["complexity"] = analyze_complexity_for_language(language, code)
+    res["flow_graph"] = build_flow_graph(language, code)
 
     vuln = analyze_vulnerabilities(language, code)
     res["vulnerabilities"] = vuln.get("findings", [])

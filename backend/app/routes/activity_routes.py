@@ -15,5 +15,7 @@ def get_user_submissions(user_id: int, db: Session = Depends(get_db), current_us
         "language": s.language, 
         "result": s.result, 
         "timestamp": s.timestamp.isoformat(), 
-        "analysis_result": s.analysis_result if s.analysis_result else {}
+        "analysis_result": s.analysis_result if s.analysis_result else {},
+        "file_name": (s.analysis_result or {}).get("file_name"),
+        "edit_count": int((s.analysis_result or {}).get("edit_count", 0)),
     } for s in submissions]

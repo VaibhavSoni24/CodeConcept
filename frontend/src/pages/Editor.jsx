@@ -46,6 +46,8 @@ const TABS = [
 function EditorPage({ user, token, handleLogout, credits, setCredits }) {
   const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(STARTER_CODE["python"]);
+  const [fileName, setFileName] = useState("main.py");
+  const [editCount, setEditCount] = useState(0);
   const [runOutput, setRunOutput] = useState({
     stdout: "",
     stderr: "",
@@ -81,10 +83,41 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
   const profiles = useMemo(() => progressData?.profiles || loadedProfile.profiles, [progressData, loadedProfile.profiles]);
   const skillScores = useMemo(() => progressData?.skill_scores || loadedProfile.skillScores, [progressData, loadedProfile.skillScores]);
 
+  const getExtForLanguage = useCallback((lang) => {
+    const found = SUPPORTED_LANGUAGES.find((l) => l.id === lang);
+    return found?.ext || ".txt";
+  }, []);
+
+  const handleCodeChange = useCallback((value) => {
+    setCode(value);
+    setEditCount((c) => c + 1);
+  }, []);
+
+  const handleRenameFile = useCallback(() => {
+    const currentExt = getExtForLanguage(language);
+    const suggested = fileName || `main${currentExt}`;
+    const next = window.prompt("Enter file name", suggested);
+    if (!next) return;
+    const trimmed = next.trim();
+    if (!trimmed) return;
+    if (trimmed.includes("/") || trimmed.includes("\\")) {
+      setError("Please enter only file name, not a path.");
+      return;
+    }
+    const finalName = /\.[a-zA-Z0-9]+$/.test(trimmed) ? trimmed : `${trimmed}${currentExt}`;
+    setFileName(finalName);
+  }, [fileName, getExtForLanguage, language]);
+
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setLanguage(newLang);
     setCode(STARTER_CODE[newLang]);
+    setEditCount(0);
+    const ext = getExtForLanguage(newLang);
+    setFileName((prev) => {
+      const base = (prev || "main").replace(/\.[a-zA-Z0-9]+$/, "");
+      return `${base}${ext}`;
+    });
     setFeedback(null);
     setRunOutput({ stdout: "", stderr: "", exit_code: null });
   };
@@ -99,6 +132,8 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
     const reader = new FileReader();
     reader.onload = (event) => {
       setCode(event.target.result);
+      setEditCount(0);
+      setFileName(file.name);
       if (matchedLang) setLanguage(matchedLang.id);
     };
     reader.readAsText(file);
@@ -151,7 +186,7 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
     setError("");
     try {
       const [result, traceResult] = await Promise.all([
-        submitCode(Number(user.id), language, code),
+        submitCode(Number(user.id), language, code, { fileName, editCount }),
         traceCode(language, code),
       ]);
       setFeedback(result);
@@ -168,6 +203,7 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
       if (result.remaining_credits !== undefined) {
          setCredits(result.remaining_credits);
       }
+      setEditCount(0);
 
       if (traceResult.trace_available) {
         setExecutionTrace(traceResult.trace);
@@ -183,13 +219,22 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
     } finally {
       setLoading("");
     }
-  }, [user, language, code, handleLogout, fetchUserProfile]);
+  }, [user, language, code, fileName, editCount, handleLogout, fetchUserProfile, setCredits]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden max-h-screen">
       <header className="px-6 py-3 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-4">
           <h1 className="text-lg font-bold">Workspace</h1>
+          <div className="text-sm border border-[var(--border)] px-3 py-1 rounded-lg text-[var(--text-secondary)]">
+            {fileName}
+          </div>
+          <button
+            className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            onClick={handleRenameFile}
+          >
+            Rename File
+          </button>
           <select 
             value={language}
             onChange={handleLanguageChange}
@@ -210,6 +255,9 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
               <span className="text-[var(--text-muted)] text-xs">(Cost: 5)</span>
             </div>
           )}
+          <div className="text-sm border border-[var(--border)] px-3 py-1 rounded-lg text-[var(--text-secondary)]">
+            Edits: {editCount}
+          </div>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -260,7 +308,7 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
         {/* ---- Left Column ---- */}
         <section className="flex flex-col gap-4 overflow-hidden h-full min-h-0">
           <div className="flex-1 rounded-xl overflow-hidden border border-[var(--border)] min-h-0">
-            <CodeEditor code={code} onChange={setCode} language={language === "python" ? "python" : language} />
+            <CodeEditor code={code} onChange={handleCodeChange} language={language === "python" ? "python" : language} />
           </div>
 
           <div className="actions flex gap-4 shrink-0">
@@ -320,7 +368,7 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
           {activeTab === "trace" && (
             <div className="tab-content slide-down space-y-4">
               <ExecutionTracePanel trace={executionTrace} />
-              <FlowGraphPanel flowGraph={feedback?.flow_graph} />
+              <FlowGraphPanel flowGraph={feedback?.flow_graph} language={language} />
             </div>
           )}
 

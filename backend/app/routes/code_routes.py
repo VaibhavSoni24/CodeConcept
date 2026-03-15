@@ -162,6 +162,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     # ---- Build structured analysis_result (stored in DB + returned in response) ----
     analysis_result = {
         "confidence": confidence,
+        "file_name": payload.file_name,
+        "edit_count": payload.edit_count,
         "mistakes": [
             {
                 "concept": i.get("concept", "Unknown"),
@@ -206,7 +208,7 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     # Update profiles
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
-    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
+    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts, payload.language)
     
     # Deduct credits
     user.credits -= COST_PER_ANALYSIS
@@ -238,6 +240,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         "concepts_detected": concepts_detected,
         "flow_graph": flow_graph,
         "similarity_score": similarity_score,
+        "file_name": payload.file_name,
+        "edit_count": payload.edit_count,
         "analysis_result": analysis_result,
         "confidence": confidence,
 

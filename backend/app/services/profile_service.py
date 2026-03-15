@@ -21,6 +21,17 @@ def _mastery_from_score(score: int) -> str:
     return "beginner"
 
 
+def _canonical_language(language: str) -> str:
+    lang = (language or "python").lower().strip()
+    if lang in {"js", "node"}:
+        return "javascript"
+    if lang in {"c++", "cxx", "cc"}:
+        return "cpp"
+    if lang in {"rs"}:
+        return "rust"
+    return lang
+
+
 def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, Any]]):
     """Record mistakes in LearningProfile. Mastery will be set by update_skill_scores."""
     for issue in issues:
@@ -87,6 +98,7 @@ def update_skill_scores(
     Also syncs mastery_level on LearningProfile rows using the score-based classifier.
     """
     error_set = set(c.lower() for c in error_concepts)
+    canonical_language = _canonical_language(language)
 
     for concept in concepts_detected:
         skill = (
@@ -94,7 +106,7 @@ def update_skill_scores(
             .filter(
                 ConceptSkill.user_id == user_id,
                 ConceptSkill.concept == concept,
-                ConceptSkill.language == language,
+                ConceptSkill.language == canonical_language,
             )
             .first()
         )
@@ -102,7 +114,7 @@ def update_skill_scores(
             skill = ConceptSkill(
                 user_id=user_id,
                 concept=concept,
-                language=language,
+                language=canonical_language,
                 correct_usage=0,
                 total_usage=0,
                 score=0,

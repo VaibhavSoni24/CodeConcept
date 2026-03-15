@@ -51,11 +51,14 @@ export async function runCode(language, code) {
   return res.data;
 }
 
-export async function submitCode(userId, language, code) {
+export async function submitCode(userId, language, code, options = {}) {
+  const { fileName = null, editCount = 0 } = options;
   const res = await api.post("/submit-code", {
     user_id: userId,
     language,
     code,
+    file_name: fileName,
+    edit_count: editCount,
   });
   return res.data;
 }
@@ -102,6 +105,11 @@ export async function traceCode(language, code) {
 
 export async function getKnowledgeRecommendations(userId) {
   const res = await api.get(`/users/${userId}/knowledge-recommendations`);
+  return res.data;
+}
+
+export async function getGlobalKnowledgeSummary() {
+  const res = await api.get(`/knowledge/global-summary`);
   return res.data;
 }
 
