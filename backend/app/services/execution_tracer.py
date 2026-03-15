@@ -1,9 +1,10 @@
 """Execution Tracer — step-by-step execution trace for 6 languages.
 
-Python  → sys.settrace (precise variable capture).
-JS/C++/Java/Go/Rust → print-based line instrumentation:
+Python  -> sys.settrace (precise variable capture).
+JS/C++/Java/Go/Rust -> print-based line instrumentation:
   Each language's trace wrapper runs the code and emits JSON-formatted
-  trace lines to stdout, which we parse into the unified trace format.
+  trace lines to stdout (or stderr for Rust), which we parse into the
+  unified trace format.
 """
 
 import json
@@ -104,13 +105,13 @@ def _run_and_parse(cmd: List[str], timeout: int = 8) -> List[Dict[str, Any]]:
                 except json.JSONDecodeError:
                     pass
         if not trace:
-            err_lines = [l.strip() for l in r.stderr.splitlines() if l.strip()]
+            err_lines = [ln.strip() for ln in r.stderr.splitlines() if ln.strip()]
             err = err_lines[-1][:200] if err_lines else "No trace output produced"
             return [{"line": -1, "variables": {"__error__": err}}]
         return trace
-    except FileNotFoundError as exc:
+    except FileNotFoundError:
         tool = cmd[0]
-        return [{"line": -1, "variables": {"__error__": f"'{tool}' not found — is it installed and on PATH?"}}]
+        return [{"line": -1, "variables": {"__error__": "'" + tool + "' not found — is it installed and on PATH?"}}]
     except subprocess.TimeoutExpired:
         return [{"line": -1, "variables": {"__error__": "Execution timed out (8s limit)"}}]
 
@@ -121,32 +122,29 @@ def _run_and_parse(cmd: List[str], timeout: int = 8) -> List[Dict[str, Any]]:
 
 def _extract_js_var_names(code: str) -> List[str]:
     """Extract user-declared variable/function/const/let names from JS source."""
-    names = set()
-    # Match: let x, const y, var z — including destructuring: let {a, b}
+    names: set = set()
     for m in re.finditer(r'\b(?:let|const|var)\s+(?:\{([^}]+)\}|\[([^\]]+)\]|(\w+))', code):
-        if m.group(1):  # destructured object: let {a, b}
+        if m.group(1):
             for part in re.findall(r'\b(\w+)\b', m.group(1)):
                 names.add(part)
-        elif m.group(2):  # destructured array: let [a, b]
+        elif m.group(2):
             for part in re.findall(r'\b(\w+)\b', m.group(2)):
                 names.add(part)
-        elif m.group(3):  # simple: let x
+        elif m.group(3):
             names.add(m.group(3))
-    # Match function declarations: function foo(a, b)
     for m in re.finditer(r'\bfunction\s+(\w+)\s*\(([^)]*)\)', code):
         names.add(m.group(1))
         for param in m.group(2).split(','):
             param = param.strip().lstrip('...')
             if param:
                 names.add(param.split('=')[0].strip())
-    # Arrow functions assigned to const/let are already caught above
-    # Filter out JS keywords, tracer internals, and all Node.js / browser built-in globals
-    _keywords = {'if', 'else', 'for', 'while', 'do', 'return', 'break', 'continue',
-                 'new', 'delete', 'typeof', 'instanceof', 'in', 'of', 'switch', 'case',
-                 'default', 'try', 'catch', 'finally', 'throw', 'class', 'extends',
-                 'import', 'export', 'from', 'async', 'await', 'true', 'false', 'null',
-                 'undefined', 'this', 'super', '__step', '__trace', '__traceLine'}
-    # Node.js / browser globals that are always in scope — never capture these
+    _keywords = {
+        'if', 'else', 'for', 'while', 'do', 'return', 'break', 'continue',
+        'new', 'delete', 'typeof', 'instanceof', 'in', 'of', 'switch', 'case',
+        'default', 'try', 'catch', 'finally', 'throw', 'class', 'extends',
+        'import', 'export', 'from', 'async', 'await', 'true', 'false', 'null',
+        'undefined', 'this', 'super', '__step', '__trace', '__traceLine',
+    }
     _node_globals = {
         'global', 'globalThis', 'process', 'console', 'module', 'exports', 'require',
         'Buffer', '__filename', '__dirname',
@@ -178,16 +176,15 @@ def run_js_trace(code: str) -> List[Dict[str, Any]]:
     """Trace JS using per-variable safe reads — only user-declared vars are shown."""
     user_vars = _extract_js_var_names(code)
 
-    # Build the variable-capture snippet for a given point:
-    # tries each known name individually so missing ones don't crash everything.
     def _make_capture(line_no: int) -> str:
         if not user_vars:
-            return f'try {{ __traceLine({line_no}, {{}}); }} catch(__te) {{}}'
+            return 'try { __traceLine(' + str(line_no) + ', {}); } catch(__te) {}'
         entries = ", ".join(
-            f'"{v}": (typeof {v} !== "undefined" ? {v} : undefined)'
+            '"' + v + '": (typeof ' + v + ' !== "undefined" ? ' + v + ' : undefined)'
             for v in user_vars
         )
-        return f'try {{ __traceLine({line_no}, {{ {entries} }}); }} catch(__te) {{ __traceLine({line_no}, {{}}); }}'
+        return ('try { __traceLine(' + str(line_no) + ', { ' + entries + ' }); } '
+                'catch(__te) { __traceLine(' + str(line_no) + ', {}); }')
 
     wrapper = '''
 const __MAX = 50;
@@ -218,7 +215,6 @@ USER_CODE_HERE
 }
 '''
 
-    # Inject trace calls after each executable line
     lines = code.splitlines()
     out = []
     for i, line in enumerate(lines, start=1):
@@ -240,37 +236,97 @@ USER_CODE_HERE
             os.remove(path)
         except OSError:
             pass
-    return "\n".join(out)
 
 
 # ─────────────────────────────────────────────────────────────
-# Simpler unified line-by-line trace for compiled languages
-# (C++, Java, Go, Rust) using print injection into source
+# C++ tracer
 # ─────────────────────────────────────────────────────────────
 
 def _build_cpp_trace(code: str) -> str:
-    """Wrap C++ code to emit TRACE JSON lines to stdout at each user line."""
+    """Instrument C++ to emit TRACE JSON with variable values after each statement.
+
+    Uses brace-depth tracking to determine which variables are currently in scope.
+    For-loop variables (int i) are assigned to depth+1 so they're only emitted
+    inside the loop body.
+    All code strings are built via Python concatenation to avoid f-string brace conflicts.
+    """
     lines = code.splitlines()
-    emitters = []
+
+    # ── Pass 1: find all declared variables and the brace-depth at declaration ──
+    _decl_re = re.compile(
+        r'\b(?:int|long|short|unsigned|float|double|char|bool|string|auto|size_t)'
+        r'(?:\s*[*&])?\s+(\w+)\s*[=;(,\[]'
+    )
+    _for_re = re.compile(r'\bfor\s*\(\s*(?:int|long|auto|size_t|unsigned)\s+(\w+)')
+    _cpp_kw = {
+        'if', 'else', 'for', 'while', 'do', 'return', 'break', 'continue',
+        'new', 'delete', 'class', 'struct', 'namespace', 'using',
+        'public', 'private', 'protected', 'static', 'const', 'void',
+        'main', 'endl', 'cout', 'cin', 'cerr',
+    }
+    var_decl_depth: Dict[str, int] = {}
+    depth = 0
+    for line in lines:
+        stripped = line.strip()
+        # For-loop variables are scoped inside the block that follows (depth + 1)
+        for m in _for_re.finditer(stripped):
+            name = m.group(1)
+            if name not in _cpp_kw:
+                var_decl_depth[name] = depth + 1
+        # Regular variable declarations at current depth
+        for m in _decl_re.finditer(stripped):
+            name = m.group(1)
+            if name not in _cpp_kw and name not in var_decl_depth:
+                var_decl_depth[name] = depth
+        depth += stripped.count('{') - stripped.count('}')
+
+    # ── Pass 2: build the instrumented source ──
+    _skip_re = re.compile(
+        r'^(class|struct|namespace|using|void\s+\w|int\s+main|'
+        r'[a-zA-Z_]\w*\s+[a-zA-Z_]\w*\s*\()'
+    )
+    out = []
+    depth = 0
     for i, line in enumerate(lines, start=1):
         stripped = line.strip()
-        if stripped and not stripped.startswith("//") and stripped not in ("{", "}"):
-            # Emit a bare trace with just the line number
-            emitters.append(f'std::cout << "TRACE:" << R"({{"line":{i},"variables":{{}}}})" << std::endl;')
-    # We inject the emitters INSIDE main. Strategy: append them at the top of main body.
-    injected = re.sub(
-        r'(int\s+main\s*\([^)]*\)\s*\{)',
-        r'\1\n' + "\n".join(emitters) + r'\n',
-        code,
-        count=1,
-    )
-    if injected == code:
-        # main() not found — just prepend emitters after the first opening brace
-        injected = code.replace("{", "{\n" + "\n".join(emitters) + "\n", 1)
-    # Ensure iostream is included
-    if "#include <iostream>" not in injected:
-        injected = "#include <iostream>\n" + injected
-    return injected
+        # Update depth BEFORE appending so the depth reflects the current nesting
+        depth += stripped.count('{') - stripped.count('}')
+        out.append(line)
+
+        if (not stripped
+                or stripped.startswith('//')
+                or stripped.startswith('#')
+                or stripped in ('{', '}')
+                or _skip_re.match(stripped)):
+            continue
+
+        # Determine which variables are in scope right now
+        in_scope = [v for v, d in sorted(var_decl_depth.items()) if depth >= d]
+
+        line_str = str(i)
+        if in_scope:
+            # Build each kv pair as:  "\"name\": \"" << (var) << "\""
+            kv_segs = []
+            for v in in_scope:
+                kv_segs.append('"\\\"' + v + '\\\": \\\"" << (' + v + ') << "\\\"" ')
+            kv_chain = ' << "," << '.join(kv_segs)
+            emit = (
+                'std::cout << "TRACE:{\\\"line\\\":' + line_str
+                + ',\\\"variables\\\":{" << ' + kv_chain
+                + ' << "}}"; std::cout << std::endl;'
+            )
+        else:
+            emit = (
+                'std::cout << "TRACE:{\\\"line\\\":' + line_str
+                + ',\\\"variables\\\":{}}" << std::endl;'
+            )
+
+        out.append('  ' + emit)
+
+    result = '\n'.join(out)
+    if '#include <iostream>' not in result:
+        result = '#include <iostream>\n' + result
+    return result
 
 
 def run_cpp_trace(code: str) -> List[Dict[str, Any]]:
@@ -280,51 +336,131 @@ def run_cpp_trace(code: str) -> List[Dict[str, Any]]:
         exe = os.path.join(tmpdir, "sol.exe" if os.name == "nt" else "sol")
         with open(src, "w", encoding="utf-8") as f:
             f.write(instrumented)
-        comp = subprocess.run(
-            ["g++", "-o", exe, src, "-std=c++17"],
-            capture_output=True, text=True, timeout=15,
-        )
+        try:
+            comp = subprocess.run(
+                ["g++", "-o", exe, src, "-std=c++17"],
+                capture_output=True, text=True, timeout=15,
+            )
+        except FileNotFoundError:
+            return [{"line": -1, "variables": {"__error__": "'g++' not found. Is it installed and on PATH?"}}]
         if comp.returncode != 0:
             err = (comp.stderr.splitlines() or ["Compile error"])[-1][:200]
-            return [{"line": -1, "variables": {"__error__": f"Compile error: {err}"}}]
+            return [{"line": -1, "variables": {"__error__": "Compile error: " + err}}]
         return _run_and_parse([exe])
 
 
+# ─────────────────────────────────────────────────────────────
+# Java tracer
+# ─────────────────────────────────────────────────────────────
+
+def _extract_java_vars(code: str) -> List[str]:
+    """Extract user-declared local variable names from Java source."""
+    names: set = set()
+    for m in re.finditer(
+        r'\b(?:int|long|short|byte|float|double|char|boolean|String|var|Integer|Double|Long)'
+        r'(?:\[\])?\s+(\w+)\s*[=;(,\[]',
+        code
+    ):
+        names.add(m.group(1))
+    for m in re.finditer(r'\bfor\s*\(\s*(?:int|long|var)\s+(\w+)', code):
+        names.add(m.group(1))
+    _exclude = {
+        'if', 'else', 'for', 'while', 'do', 'return', 'break', 'continue',
+        'new', 'class', 'public', 'private', 'protected', 'static', 'void',
+        'main', 'args', 'System',
+    }
+    return [n for n in sorted(names) if n not in _exclude]
+
+
 def _build_java_trace(code: str) -> str:
-    """Inject System.out.println TRACE lines at each non-blank line inside methods."""
+    """Inject System.out.println TRACE lines with variable values after each statement."""
+    user_vars = _extract_java_vars(code)
     lines = code.splitlines()
     out = []
+    _skip_re = re.compile(r'^(public|private|protected|class|import|package|@)')
+
     for i, line in enumerate(lines, start=1):
         out.append(line)
         stripped = line.strip()
-        if stripped and not stripped.startswith("//") and stripped not in ("{", "}"):
-            out.append(f'        System.out.println("TRACE:" + "{{\\"line\\":{i},\\"variables\\":{{}}}}" );')
+
+        if (not stripped
+                or stripped.startswith('//')
+                or stripped in ('{', '}')
+                or _skip_re.match(stripped)):
+            continue
+
+        line_str = str(i)
+        if user_vars:
+            # Build JSON via String concat: "\"name\": \"" + var + "\""
+            kv_parts = []
+            for v in user_vars:
+                kv_parts.append('"\\\"' + v + '\\\": \\\"" + ' + v + ' + "\\\"" ')
+            kv_str = ' + "," + '.join(kv_parts)
+            emit = (
+                '        try { System.out.println("TRACE:{\\\"line\\\":' + line_str
+                + ',\\\"variables\\\":{" + ' + kv_str
+                + ' + "}}"); }'
+                + ' catch (Exception __te) { System.out.println("TRACE:{\\\"line\\\":' + line_str
+                + ',\\\"variables\\\": {}}"); }'
+            )
+        else:
+            emit = (
+                '        System.out.println("TRACE:{\\\"line\\\":' + line_str
+                + ',\\\"variables\\\": {}}");'
+            )
+
+        out.append(emit)
+
     return "\n".join(out)
 
 
 def run_java_trace(code: str) -> List[Dict[str, Any]]:
-    # Detect public class name
     match = re.search(r'public\s+class\s+(\w+)', code)
     class_name = match.group(1) if match else "Main"
     instrumented = _build_java_trace(code)
     with tempfile.TemporaryDirectory() as tmpdir:
-        src = os.path.join(tmpdir, f"{class_name}.java")
+        src = os.path.join(tmpdir, class_name + ".java")
         with open(src, "w", encoding="utf-8") as f:
             f.write(instrumented)
-        comp = subprocess.run(
-            ["javac", src], capture_output=True, text=True, timeout=20,
-        )
+        try:
+            comp = subprocess.run(
+                ["javac", src], capture_output=True, text=True, timeout=20,
+            )
+        except FileNotFoundError:
+            return [{"line": -1, "variables": {"__error__": "'javac' not found. Is Java installed and on PATH?"}}]
         if comp.returncode != 0:
             err = (comp.stderr.splitlines() or ["Compile error"])[-1][:200]
-            return [{"line": -1, "variables": {"__error__": f"Compile error: {err}"}}]
+            return [{"line": -1, "variables": {"__error__": "Compile error: " + err}}]
         return _run_and_parse(["java", "-cp", tmpdir, class_name])
 
 
+# ─────────────────────────────────────────────────────────────
+# Go tracer
+# ─────────────────────────────────────────────────────────────
+
+def _extract_go_vars(code: str) -> List[str]:
+    """Extract user-declared variable names from Go source."""
+    names: set = set()
+    for m in re.finditer(r'\b(\w+)\s*:=', code):
+        names.add(m.group(1))
+    for m in re.finditer(r'\bvar\s+(\w+)\s+\w+', code):
+        names.add(m.group(1))
+    for m in re.finditer(r'\bfor\s+(\w+)\s*:=', code):
+        names.add(m.group(1))
+    _exclude = {
+        'if', 'else', 'for', 'range', 'return', 'break', 'continue',
+        'fmt', 'err', 'main', '_',
+    }
+    return [n for n in sorted(names) if n not in _exclude]
+
+
 def _build_go_trace(code: str) -> str:
-    """Inject fmt.Printf TRACE lines at each non-blank statement in Go."""
+    """Inject fmt.Printf TRACE lines with variable values after each statement in Go."""
+    user_vars = _extract_go_vars(code)
     lines = code.splitlines()
     out = []
     in_import = False
+
     for i, line in enumerate(lines, start=1):
         stripped = line.strip()
         if stripped.startswith("import"):
@@ -332,21 +468,38 @@ def _build_go_trace(code: str) -> str:
         if in_import and stripped == ")":
             in_import = False
         out.append(line)
-        if (not in_import and stripped and
-                not stripped.startswith("//") and
-                stripped not in ("{", "}") and
-                not stripped.startswith("package ") and
-                not stripped.startswith("import")):
-            out.append(f'\tfmt.Print("TRACE:{{\\"line\\":{i},\\"variables\\":{{}}}}" + "\\n")')
-    # Ensure fmt is imported
+
+        if (in_import
+                or not stripped
+                or stripped.startswith("//")
+                or stripped in ("{", "}")
+                or stripped.startswith("package ")
+                or stripped.startswith("import")
+                or stripped.startswith("func ")
+                or stripped.startswith("type ")):
+            continue
+
+        line_str = str(i)
+        if user_vars:
+            # fmt.Printf with %v format for each variable
+            # e.g.: TRACE:{"line":3,"variables":{"x":"%v","i":"%v"}}
+            kv_fmt = ",".join('\\"' + v + '\\":\\"%v\\"' for v in user_vars)
+            fmt_args = ", ".join(user_vars)
+            fmt_str = 'TRACE:{\\\"line\\\":' + line_str + ',\\\"variables\\\":{' + kv_fmt + '}}\\n'
+            emit = '\tfmt.Printf("' + fmt_str + '", ' + fmt_args + ')'
+        else:
+            fmt_str = 'TRACE:{\\\"line\\\":' + line_str + ',\\\"variables\\\":{}}\\n'
+            emit = '\tfmt.Printf("' + fmt_str + '")'
+
+        out.append(emit)
+
+    out_str = "\n".join(out)
     if '"fmt"' not in code:
-        out_str = "\n".join(out)
-        out_str = out_str.replace("import (", 'import (\n\t"fmt"', 1)
-        if 'import (' not in out_str:
-            out_str = out_str.replace('import "fmt"', '')
+        if 'import (' in out_str:
+            out_str = out_str.replace("import (", 'import (\n\t"fmt"', 1)
+        else:
             out_str = re.sub(r'(package\s+\w+\s*\n)', r'\1\nimport "fmt"\n', out_str)
-        return out_str
-    return "\n".join(out)
+    return out_str
 
 
 def run_go_trace(code: str) -> List[Dict[str, Any]]:
@@ -358,19 +511,55 @@ def run_go_trace(code: str) -> List[Dict[str, Any]]:
         return _run_and_parse(["go", "run", src])
 
 
+# ─────────────────────────────────────────────────────────────
+# Rust tracer
+# ─────────────────────────────────────────────────────────────
+
+def _extract_rust_vars(code: str) -> List[str]:
+    """Extract user-declared variable names from Rust source."""
+    names: set = set()
+    for m in re.finditer(r'\blet\s+(?:mut\s+)?(\w+)\s*[=:]', code):
+        names.add(m.group(1))
+    _exclude = {
+        'if', 'else', 'for', 'while', 'loop', 'return', 'break', 'continue',
+        'fn', 'main', '_', 'mut',
+    }
+    return [n for n in sorted(names) if n not in _exclude]
+
+
 def _build_rust_trace(code: str) -> str:
-    """Inject eprintln! TRACE lines into Rust code (using stderr so it still shows)."""
+    """Inject eprintln! TRACE lines with variable values into Rust code (uses stderr)."""
+    user_vars = _extract_rust_vars(code)
     lines = code.splitlines()
     out = []
+
     for i, line in enumerate(lines, start=1):
         stripped = line.strip()
         out.append(line)
-        if (stripped and not stripped.startswith("//") and
-                stripped not in ("{", "}") and
-                not stripped.startswith("use ") and
-                not stripped.startswith("fn ") and
-                not stripped.startswith("#[")):
-            out.append(f'    eprintln!("TRACE:{{\\"line\\":{i},\\"variables\\":{{}}}}" );')
+
+        if (not stripped
+                or stripped.startswith("//")
+                or stripped in ("{", "}")
+                or stripped.startswith("use ")
+                or stripped.startswith("fn ")
+                or stripped.startswith("#[")
+                or stripped.startswith("pub ")
+                or stripped.startswith("mod ")):
+            continue
+
+        line_str = str(i)
+        if user_vars:
+            # {:?} gives Debug repr for any type
+            kv_fmt = ",".join('\\"' + v + '\\":\\"{:?}\\"' for v in user_vars)
+            fmt_args = ", ".join(user_vars)
+            fmt_str = 'TRACE:{\\\"line\\\":' + line_str + ',\\\"variables\\\":{' + kv_fmt + '}}'
+            emit = '    eprintln!("' + fmt_str + '", ' + fmt_args + ');'
+        else:
+            fmt_str = 'TRACE:{\\\"line\\\":' + line_str + ',\\\"variables\\\":{}}'
+            emit = '    eprintln!("' + fmt_str + '");'
+
+        out.append(emit)
+
     return "\n".join(out)
 
 
@@ -381,21 +570,22 @@ def run_rust_trace(code: str) -> List[Dict[str, Any]]:
         exe = os.path.join(tmpdir, "main.exe" if os.name == "nt" else "main")
         with open(src, "w", encoding="utf-8") as f:
             f.write(instrumented)
-        comp = subprocess.run(
-            ["rustc", src, "-o", exe], capture_output=True, text=True, timeout=30,
-        )
+        try:
+            comp = subprocess.run(
+                ["rustc", src, "-o", exe], capture_output=True, text=True, timeout=30,
+            )
+        except FileNotFoundError:
+            return [{"line": -1, "variables": {"__error__": "'rustc' not found. Is Rust installed and on PATH?"}}]
         if comp.returncode != 0:
             err = (comp.stderr.splitlines() or ["Compile error"])[-1][:200]
-            return [{"line": -1, "variables": {"__error__": f"Compile error: {err}"}}]
-        # Rust trace uses stderr for TRACE lines, stdout for program output
+            return [{"line": -1, "variables": {"__error__": "Compile error: " + err}}]
         try:
             r = subprocess.run([exe], capture_output=True, text=True, timeout=8)
-            lines = r.stderr.splitlines()
             trace = []
-            for line in lines:
-                if line.startswith("TRACE:"):
+            for ln in r.stderr.splitlines():
+                if ln.startswith("TRACE:"):
                     try:
-                        trace.append(json.loads(line[6:]))
+                        trace.append(json.loads(ln[6:]))
                     except json.JSONDecodeError:
                         pass
             if not trace:
@@ -426,4 +616,4 @@ def run_execution_trace(code: str, language: str = "python") -> List[Dict[str, A
     elif lang in ("rust", "rs"):
         return run_rust_trace(code)
     else:
-        return [{"line": -1, "variables": {"__error__": f"Tracing not supported for '{language}'"}}]
+        return [{"line": -1, "variables": {"__error__": "Tracing not supported for '" + language + "'"}}]
