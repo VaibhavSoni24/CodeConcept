@@ -8,12 +8,30 @@ JS/C++/Java/Go/Rust -> print-based line instrumentation:
 """
 
 import json
+import math
 import os
 import re
 import subprocess
 import sys
 import tempfile
 from typing import Any, Dict, List
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    """Recursively convert non-JSON-safe values to safe representations."""
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "NaN"
+        if math.isinf(value):
+            return "Infinity" if value > 0 else "-Infinity"
+        return value
+    if isinstance(value, list):
+        return [_sanitize_json_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_sanitize_json_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_json_value(v) for k, v in value.items()}
+    return value
 
 # ─────────────────────────────────────────────────────────────
 # Python tracer (original sys.settrace approach)
@@ -604,16 +622,18 @@ def run_execution_trace(code: str, language: str = "python") -> List[Dict[str, A
     """Dispatch execution tracing to the correct language handler."""
     lang = language.lower()
     if lang == "python":
-        return run_python_trace(code)
+        trace = run_python_trace(code)
     elif lang in ("javascript", "js", "node"):
-        return run_js_trace(code)
+        trace = run_js_trace(code)
     elif lang in ("cpp", "c++", "c"):
-        return run_cpp_trace(code)
+        trace = run_cpp_trace(code)
     elif lang == "java":
-        return run_java_trace(code)
+        trace = run_java_trace(code)
     elif lang == "go":
-        return run_go_trace(code)
+        trace = run_go_trace(code)
     elif lang in ("rust", "rs"):
-        return run_rust_trace(code)
+        trace = run_rust_trace(code)
     else:
-        return [{"line": -1, "variables": {"__error__": "Tracing not supported for '" + language + "'"}}]
+        trace = [{"line": -1, "variables": {"__error__": "Tracing not supported for '" + language + "'"}}]
+
+    return _sanitize_json_value(trace)
