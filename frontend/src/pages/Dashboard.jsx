@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar
 } from 'recharts';
-import api, { getProfile, getUserSubmissions } from '../api';
+import { getProfile, getUserSubmissions, getUserSubscription } from '../api';
 import { Award, Target, Activity as ActivityIcon, Zap, BookOpen, BadgeCheck } from 'lucide-react';
 import { 
   computeAverageConfidence, 
@@ -19,6 +19,7 @@ function Dashboard({ user, credits }) {
   const [profile, setProfile] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [activeSkillLang, setActiveSkillLang] = useState('python');
+  const [subscriptionName, setSubscriptionName] = useState('Free');
 
   useEffect(() => {
     async function loadData() {
@@ -31,6 +32,9 @@ function Dashboard({ user, credits }) {
         ]);
         setProfile(profData);
         setSubmissions(subData);
+        const subDataResp = await getUserSubscription(user.id).catch(() => null);
+        const planLabel = subDataResp?.plan?.name || subDataResp?.plan_key || 'Free';
+        setSubscriptionName(planLabel);
       } catch (err) {
         console.error("Dashboard failed to load", err);
       } finally {
@@ -48,7 +52,7 @@ function Dashboard({ user, credits }) {
     const errorRate = computeMistakeRate(submissions);
     const rank = getUserRank(avgConfidence);
     const conceptCount = new Set((profile?.skill_scores || []).map((s) => s.concept).filter(Boolean)).size;
-    const subscriptionName = user?.subscription_plan || user?.plan || 'Free';
+    const currentSubscriptionName = subscriptionName;
     
     return {
       totalSubmissions,
@@ -57,9 +61,9 @@ function Dashboard({ user, credits }) {
       rank,
       languages: [...new Set(submissions.map(s => s.language).filter(Boolean))],
       conceptCount,
-      subscriptionName,
+      subscriptionName: currentSubscriptionName,
     };
-  }, [submissions, profile, user]);
+  }, [submissions, profile, subscriptionName]);
 
   // History for LineChart based on submissions
   const historyData = useMemo(() => {

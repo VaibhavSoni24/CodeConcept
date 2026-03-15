@@ -118,4 +118,30 @@ export async function getUserCredits(userId) {
   return res.data;
 }
 
+// ---------- Billing (dummy payment mode) ----------
+export async function getBillingPlans() {
+  const res = await api.get(`/billing/plans`);
+  return res.data;
+}
+
+export async function getUserSubscription(userId) {
+  const res = await api.get(`/billing/users/${userId}/subscription`);
+  return res.data;
+}
+
+export async function subscribePlan(userId, planKey) {
+  const res = await api.post(`/billing/users/${userId}/subscribe/${planKey}`);
+  return res.data;
+}
+
+export async function topupCredits(userId, packKey) {
+  const res = await api.post(`/billing/users/${userId}/topup/${packKey}`);
+  return res.data;
+}
+
+export async function getBillingMetrics() {
+  const res = await api.get(`/billing/metrics`);
+  return res.data;
+}
+
 export default api;
