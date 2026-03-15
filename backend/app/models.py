@@ -86,3 +86,18 @@ class Note(Base):
 
     user = relationship("User")
     submission = relationship("Submission")
+
+
+class UserSubscription(Base):
+    __tablename__ = "user_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    plan_name = Column(String(50), default="free")
+    price_monthly = Column(Integer, default=0)
+    credits_per_month = Column(Integer, default=150)
+    status = Column(String(20), default="active")
+    renewed_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

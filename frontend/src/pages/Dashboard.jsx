@@ -4,8 +4,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar
 } from 'recharts';
-import api, { getProfile, getUserSubmissions } from '../api';
-import { Award, Target, Activity as ActivityIcon, Zap } from 'lucide-react';
+import { getProfile, getUserSubmissions, getUserSubscription } from '../api';
+import { Award, Target, Activity as ActivityIcon, Zap, BookOpen, BadgeCheck } from 'lucide-react';
 import { 
   computeAverageConfidence, 
   computeMistakeRate, 
@@ -19,6 +19,7 @@ function Dashboard({ user, credits }) {
   const [profile, setProfile] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [activeSkillLang, setActiveSkillLang] = useState('python');
+  const [subscriptionName, setSubscriptionName] = useState('Free');
 
   useEffect(() => {
     async function loadData() {
@@ -31,6 +32,9 @@ function Dashboard({ user, credits }) {
         ]);
         setProfile(profData);
         setSubmissions(subData);
+        const subDataResp = await getUserSubscription(user.id).catch(() => null);
+        const planLabel = subDataResp?.plan?.name || subDataResp?.plan_key || 'Free';
+        setSubscriptionName(planLabel);
       } catch (err) {
         console.error("Dashboard failed to load", err);
       } finally {
@@ -47,15 +51,19 @@ function Dashboard({ user, credits }) {
     const avgConfidence = computeAverageConfidence(submissions);
     const errorRate = computeMistakeRate(submissions);
     const rank = getUserRank(avgConfidence);
+    const conceptCount = new Set((profile?.skill_scores || []).map((s) => s.concept).filter(Boolean)).size;
+    const currentSubscriptionName = subscriptionName;
     
     return {
       totalSubmissions,
       avgConfidencePercentage: Math.round(avgConfidence * 100),
       errorRatePercentage: Math.round(errorRate * 100),
       rank,
-      languages: [...new Set(submissions.map(s => s.language).filter(Boolean))]
+      languages: [...new Set(submissions.map(s => s.language).filter(Boolean))],
+      conceptCount,
+      subscriptionName: currentSubscriptionName,
     };
-  }, [submissions]);
+  }, [submissions, profile, subscriptionName]);
 
   // History for LineChart based on submissions
   const historyData = useMemo(() => {
@@ -127,7 +135,7 @@ function Dashboard({ user, credits }) {
       </header>
 
       {/* Top Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
         <div className="card p-6 flex items-center gap-4 border-l-4 border-l-blue-500">
           <div className="p-3 bg-blue-500/10 rounded-lg"><ActivityIcon className="text-blue-500" size={24}/></div>
           <div>
@@ -170,6 +178,22 @@ function Dashboard({ user, credits }) {
           <div>
             <p className="text-sm text-gray-400 font-semibold mb-1">Credits Remaining</p>
             <p className={`text-2xl font-bold ${credits > 50 ? "text-emerald-500" : (credits >= 20 ? "text-yellow-500" : "text-red-500")}`}>{credits !== null ? credits : "..."}</p>
+          </div>
+        </div>
+
+        <div className="card p-6 flex items-center gap-4 border-l-4 border-l-cyan-500">
+          <div className="p-3 bg-cyan-500/10 rounded-lg"><BookOpen className="text-cyan-500" size={24}/></div>
+          <div>
+            <p className="text-sm text-gray-400 font-semibold mb-1">Concepts Learned</p>
+            <p className="text-2xl font-bold">{stats.conceptCount}</p>
+          </div>
+        </div>
+
+        <div className="card p-6 flex items-center gap-4 border-l-4 border-l-purple-500">
+          <div className="p-3 bg-purple-500/10 rounded-lg"><BadgeCheck className="text-purple-400" size={24}/></div>
+          <div>
+            <p className="text-sm text-gray-400 font-semibold mb-1">Current Subscription</p>
+            <p className="text-2xl font-bold capitalize">{stats.subscriptionName}</p>
           </div>
         </div>
       </div>

@@ -119,7 +119,7 @@ function MainApp({ user, token, handleLogout }) {
             <Route path="/activity" element={<Activity user={user} />} />
             <Route path="/profile" element={<Profile user={user} credits={credits} />} />
             <Route path="/knowledge" element={<Knowledge user={user} />} />
-            <Route path="/shop" element={<Shop />} />
+            <Route path="/shop" element={<Shop user={user} credits={credits} setCredits={setCredits} />} />
             <Route path="/about" element={<About />} />
           </Routes>
         </ErrorBoundary>
