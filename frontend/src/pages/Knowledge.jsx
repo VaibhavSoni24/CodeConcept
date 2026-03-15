@@ -17,6 +17,7 @@ import {
   Cell,
   LineChart,
   Line,
+  Legend,
 } from 'recharts';
 import { BookOpen, GraduationCap, Youtube } from 'lucide-react';
 import { getKnowledgeRecommendations, getGlobalKnowledgeSummary } from '../api';
@@ -70,6 +71,7 @@ function Knowledge({ user }) {
     language_summary = [],
     language_activity = [],
     mastery_distribution = [],
+    top_concept_trend = [],
     global_users = 0,
   } = knowledgeData || {};
 
@@ -77,10 +79,19 @@ function Knowledge({ user }) {
     (language_activity || []).map((item) => [item.language, item.submissions])
   );
 
-  const topConceptTrend = [...concepts_learned]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
-    .map((c, i) => ({ rank: i + 1, concept: c.concept, score: c.score }));
+  const topConceptTrend = (top_concept_trend && top_concept_trend.length > 0)
+    ? top_concept_trend
+    : [...concepts_learned]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map((c, i) => ({ rank: i + 1, concept: c.concept, score: c.score, level: c.level }));
+
+  const totalMasteryCount = mastery_distribution.reduce((sum, item) => sum + (item.value || 0), 0);
+
+  const masteryPieData = mastery_distribution.map((item) => ({
+    ...item,
+    pct: totalMasteryCount > 0 ? Math.round(((item.value || 0) / totalMasteryCount) * 100) : 0,
+  }));
 
   // Empty state guard
   if (!knowledgeData || (Object.keys(languages).length === 0 && concepts_learned.length === 0)) {
@@ -135,7 +146,7 @@ function Knowledge({ user }) {
           </div>
           <div className="card p-5">
             <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Languages Covered</p>
-            <p className="text-xl font-bold mt-2">{Object.keys(languages).length}</p>
+            <p className="text-xl font-bold mt-2">{SUPPORTED_LANGUAGES.length}</p>
           </div>
           <div className="card p-5">
             <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Concepts Tracked</p>
@@ -178,12 +189,19 @@ function Knowledge({ user }) {
             <h3 className="text-lg font-bold mb-4">Mastery Distribution</h3>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={mastery_distribution} dataKey="value" nameKey="name" outerRadius={110} label>
-                  {mastery_distribution.map((entry, index) => (
+                <Pie
+                  data={masteryPieData}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={110}
+                  label={({ name, pct }) => `${name}: ${pct}%`}
+                >
+                  {masteryPieData.map((entry, index) => (
                     <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -191,11 +209,22 @@ function Knowledge({ user }) {
           <div className="card p-5 h-[360px]">
             <h3 className="text-lg font-bold mb-4">Top Concept Trend</h3>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={topConceptTrend} margin={{ top: 8, right: 16, left: 0, bottom: 30 }}>
+              <LineChart data={topConceptTrend} margin={{ top: 8, right: 16, left: 0, bottom: 50 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="rank" tick={{ fill: 'var(--text-secondary)' }} />
+                <XAxis
+                  dataKey="concept"
+                  angle={-20}
+                  textAnchor="end"
+                  height={65}
+                  interval={0}
+                  tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
+                />
                 <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-secondary)' }} />
-                <Tooltip formatter={(value, _name, item) => [`${value}%`, item?.payload?.concept || 'Concept']} contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+                <Tooltip
+                  formatter={(value, _name, item) => [`${value}%`, item?.payload?.level || 'Mastery']}
+                  labelFormatter={(label) => `Concept: ${label}`}
+                  contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+                />
                 <Line type="monotone" dataKey="score" stroke="#22c55e" strokeWidth={3} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>

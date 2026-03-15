@@ -9,6 +9,8 @@ from ..services.youtube_service import get_learning_videos
 
 router = APIRouter(tags=["knowledge"])
 
+SUPPORTED_LANGUAGES = ["python", "javascript", "cpp", "java", "go", "rust"]
+
 
 def _canonical_language(language: str) -> str:
     lang = (language or "python").lower().strip()
@@ -30,11 +32,20 @@ def _level_from_score(score: int) -> str:
 
 
 def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any]) -> Dict[str, Any]:
-    languages_dict: Dict[str, Any] = {}
+    languages_dict: Dict[str, Any] = {
+        lang: {
+            "concept_scores": [],
+            "total_correct": 0,
+            "total_usage": 0,
+            "score_sum": 0,
+            "score_count": 0,
+        }
+        for lang in SUPPORTED_LANGUAGES
+    }
     concept_totals: Dict[str, Dict[str, int]] = {}
 
     for skill in skills:
-        score = int((skill.correct_usage / max(skill.total_usage, 1)) * 100)
+        score = int(max(0, min(100, round(skill.score or 0))))
         lang_key = _canonical_language(skill.language)
 
         if lang_key not in languages_dict:
@@ -42,6 +53,8 @@ def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any])
                 "concept_scores": [],
                 "total_correct": 0,
                 "total_usage": 0,
+                "score_sum": 0,
+                "score_count": 0,
             }
 
         languages_dict[lang_key]["concept_scores"].append(
@@ -52,17 +65,31 @@ def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any])
         )
         languages_dict[lang_key]["total_correct"] += skill.correct_usage
         languages_dict[lang_key]["total_usage"] += skill.total_usage
+        languages_dict[lang_key]["score_sum"] += score
+        languages_dict[lang_key]["score_count"] += 1
 
         c_mapped = skill.concept.replace("_", " ").title()
         if c_mapped not in concept_totals:
-            concept_totals[c_mapped] = {"correct": 0, "total": 0}
+            concept_totals[c_mapped] = {
+                "score_sum": 0,
+                "score_count": 0,
+                "weighted_score_sum": 0,
+                "weight_total": 0,
+            }
 
-        concept_totals[c_mapped]["correct"] += skill.correct_usage
-        concept_totals[c_mapped]["total"] += skill.total_usage
+        concept_totals[c_mapped]["score_sum"] += score
+        concept_totals[c_mapped]["score_count"] += 1
+        weight = int(skill.total_usage or 0)
+        concept_totals[c_mapped]["weighted_score_sum"] += score * max(weight, 1)
+        concept_totals[c_mapped]["weight_total"] += max(weight, 1)
 
     concepts_learned = []
     for c_name, counts in concept_totals.items():
-        avg_score = int((counts["correct"] / max(counts["total"], 1)) * 100)
+        if counts["weight_total"] > 0:
+            avg_score = int(round(counts["weighted_score_sum"] / counts["weight_total"]))
+        else:
+            avg_score = int(round(counts["score_sum"] / max(counts["score_count"], 1)))
+
         concepts_learned.append(
             {
                 "concept": c_name,
@@ -71,11 +98,12 @@ def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any])
             }
         )
 
-    sorted_concepts = sorted(concepts_learned, key=lambda x: x["score"])
+    sorted_concepts = sorted(concepts_learned, key=lambda x: (-x["score"], x["concept"]))
 
     language_summary = []
-    for lang, data in languages_dict.items():
-        avg_lang_score = int((data["total_correct"] / max(data["total_usage"], 1)) * 100)
+    for lang in SUPPORTED_LANGUAGES:
+        data = languages_dict[lang]
+        avg_lang_score = int(round(data["score_sum"] / max(data["score_count"], 1))) if data["score_count"] > 0 else 0
         language_summary.append(
             {
                 "language": lang,
@@ -84,19 +112,23 @@ def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any])
                 "attempts": data["total_usage"],
             }
         )
-    language_summary.sort(key=lambda x: x["avg_score"], reverse=True)
 
     mastery_distribution = {"Strong": 0, "Moderate": 0, "Needs Practice": 0}
-    for item in sorted_concepts:
+    for item in concepts_learned:
         mastery_distribution[item["level"]] += 1
 
     submission_counts = {_canonical_language(lang): count for lang, count in submissions}
-    for lang in languages_dict.keys():
+    for lang in SUPPORTED_LANGUAGES:
         submission_counts.setdefault(lang, 0)
 
     language_activity = [
-        {"language": lang, "submissions": count}
-        for lang, count in sorted(submission_counts.items(), key=lambda x: x[1], reverse=True)
+        {"language": lang, "submissions": int(submission_counts.get(lang, 0))}
+        for lang in SUPPORTED_LANGUAGES
+    ]
+
+    top_concept_trend = [
+        {"rank": idx + 1, "concept": item["concept"], "score": item["score"], "level": item["level"]}
+        for idx, item in enumerate(sorted_concepts[:10])
     ]
 
     return {
@@ -104,6 +136,7 @@ def _build_knowledge_payload(skills: List[ConceptSkill], submissions: List[Any])
         "concepts_learned": sorted_concepts,
         "language_summary": language_summary,
         "language_activity": language_activity,
+        "top_concept_trend": top_concept_trend,
         "mastery_distribution": [
             {"name": "Strong", "value": mastery_distribution["Strong"]},
             {"name": "Moderate", "value": mastery_distribution["Moderate"]},
