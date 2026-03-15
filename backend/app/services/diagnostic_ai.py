@@ -10,9 +10,17 @@ load_dotenv()
 
 
 def _fallback_diagnostic(mapped_issue: Dict[str, Any]) -> Dict[str, Any]:
+    mistake_type = mapped_issue.get("mistake_type", "Concept misunderstanding")
+    if mistake_type == "none":
+        understanding_score = 80
+    elif mistake_type in {"syntax", "syntax_error"}:
+        understanding_score = 55
+    else:
+        understanding_score = 45
+
     return {
         "concept_missed": mapped_issue.get("concept", "General Python fundamentals"),
-        "mistake_type": mapped_issue.get("mistake_type", "Concept misunderstanding"),
+        "mistake_type": mistake_type,
         "explanation": mapped_issue.get(
             "explanation",
             "There is a conceptual issue in your code. Focus on understanding the execution flow before patching syntax.",
@@ -21,6 +29,8 @@ def _fallback_diagnostic(mapped_issue: Dict[str, Any]) -> Dict[str, Any]:
         "hint_2": mapped_issue.get("hint_2", "Ask: what condition should become true or false to finish correctly?"),
         "hint_3": mapped_issue.get("hint_3", "Apply one small fix, then re-run and compare behavior."),
         "practice": mapped_issue.get("practice", "Write a tiny version of this problem and solve it with print tracing."),
+        "understanding_score": understanding_score,
+        "concept_scores": {},
         "refactoring_suggestions": [],
     }
 
@@ -85,7 +95,12 @@ student_history:
 {payload.get('student_history', {})}
 
 Return strictly valid JSON with keys only:
-concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice
+concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice, understanding_score, concept_scores
+
+Scoring rules:
+- understanding_score: integer 0-100 based on conceptual understanding and code quality.
+- concept_scores: object mapping concept names to integer 0-100.
+- Keep scores realistic and granular (avoid only 0 or 100 unless clearly warranted).
 """
 
     response_schema = {
@@ -101,6 +116,11 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice
                 "hint_2": {"type": "string"},
                 "hint_3": {"type": "string"},
                 "practice": {"type": "string"},
+                "understanding_score": {"type": "integer", "minimum": 0, "maximum": 100},
+                "concept_scores": {
+                    "type": "object",
+                    "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 100},
+                },
             },
             "required": [
                 "concept_missed",
@@ -110,6 +130,8 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice
                 "hint_2",
                 "hint_3",
                 "practice",
+                "understanding_score",
+                "concept_scores",
             ],
             "additionalProperties": False,
         },
@@ -165,6 +187,24 @@ concept_missed, mistake_type, explanation, hint_1, hint_2, hint_3, practice
 
         if text.startswith("{"):
             result = json.loads(text)
+            if not isinstance(result.get("understanding_score"), int):
+                result["understanding_score"] = 60
+            result["understanding_score"] = max(0, min(100, result["understanding_score"]))
+
+            concept_scores = result.get("concept_scores")
+            if not isinstance(concept_scores, dict):
+                result["concept_scores"] = {}
+            else:
+                sanitized_scores = {}
+                for key, value in concept_scores.items():
+                    if not isinstance(key, str):
+                        continue
+                    if isinstance(value, bool):
+                        continue
+                    if isinstance(value, (int, float)):
+                        sanitized_scores[key] = int(max(0, min(100, round(value))))
+                result["concept_scores"] = sanitized_scores
+
             result["refactoring_suggestions"] = refactoring
             return result
     except Exception:

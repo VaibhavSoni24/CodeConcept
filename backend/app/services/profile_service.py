@@ -32,6 +32,25 @@ def _canonical_language(language: str) -> str:
     return lang
 
 
+def _clamp_score(value: float) -> int:
+    return int(max(0, min(100, round(value))))
+
+
+def _normalize_concept_scores(concept_scores: Dict[str, Any] | None) -> Dict[str, int]:
+    if not isinstance(concept_scores, dict):
+        return {}
+
+    normalized: Dict[str, int] = {}
+    for concept, score in concept_scores.items():
+        if not isinstance(concept, str):
+            continue
+        if isinstance(score, bool):
+            continue
+        if isinstance(score, (int, float)):
+            normalized[concept.lower().strip()] = _clamp_score(score)
+    return normalized
+
+
 def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, Any]]):
     """Record mistakes in LearningProfile. Mastery will be set by update_skill_scores."""
     for issue in issues:
@@ -93,12 +112,20 @@ def update_skill_scores(
     concepts_detected: List[str],
     error_concepts: List[str],
     language: str = "python",
+    understanding_score: int | None = None,
+    concept_scores: Dict[str, Any] | None = None,
 ):
     """Update concept skill scores. Concepts without errors get correct_usage++.
     Also syncs mastery_level on LearningProfile rows using the score-based classifier.
     """
     error_set = set(c.lower() for c in error_concepts)
     canonical_language = _canonical_language(language)
+    per_concept_ai_scores = _normalize_concept_scores(concept_scores)
+    base_understanding = _clamp_score(understanding_score if understanding_score is not None else 60)
+
+    # Bayesian smoothing avoids first-attempt binary scores (0 or 100).
+    prior_strength = 2
+    prior_mean = base_understanding / 100.0
 
     for concept in concepts_detected:
         skill = (
@@ -125,7 +152,18 @@ def update_skill_scores(
         if concept.lower() not in error_set:
             skill.correct_usage += 1
 
-        skill.score = int((skill.correct_usage / max(skill.total_usage, 1)) * 100)
+        smoothed_ratio = (
+            skill.correct_usage + (prior_strength * prior_mean)
+        ) / (max(skill.total_usage, 1) + prior_strength)
+        usage_score = _clamp_score(smoothed_ratio * 100)
+
+        ai_concept_score = per_concept_ai_scores.get(concept.lower().strip())
+        if ai_concept_score is not None:
+            # Blend concept usage with model understanding for concept-level nuance.
+            skill.score = _clamp_score((0.7 * usage_score) + (0.3 * ai_concept_score))
+        else:
+            skill.score = usage_score
+
         skill.last_updated = datetime.utcnow()
 
         # Sync mastery level onto LearningProfile row (if it exists)

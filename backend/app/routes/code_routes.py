@@ -143,8 +143,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Diagnostic generation failed: {str(e)}")
 
-    # ---- Compute confidence score ----
-    # correct concepts = detected concepts that do NOT appear in the error set
+    # ---- Compute concept-usage and understanding-aware confidence ----
+    # concept usage = detected concepts that do NOT appear in the error set
     error_concept_set = set(
         i.get("concept", "").lower()
         for i in issues
@@ -154,14 +154,30 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     correct_count = sum(
         1 for c in concepts_detected if c.lower() not in error_concept_set
     )
-    confidence = correct_count / max(total_detected, 1) if total_detected > 0 else (
-        1.0 if not error_concept_set else 0.0
+    concept_usage_score = (correct_count / max(total_detected, 1)) * 100 if total_detected > 0 else (
+        100.0 if not error_concept_set else 0.0
     )
-    confidence = round(max(0.0, min(1.0, confidence)), 4)
+
+    raw_understanding = diagnostic.get("understanding_score", concept_usage_score)
+    try:
+        understanding_score = float(raw_understanding)
+    except (TypeError, ValueError):
+        understanding_score = concept_usage_score
+    understanding_score = max(0.0, min(100.0, understanding_score))
+
+    weighted_score = round((0.7 * concept_usage_score) + (0.3 * understanding_score), 2)
+    confidence = round(weighted_score / 100.0, 4)
+
+    concept_scores_from_ai = diagnostic.get("concept_scores")
+    if not isinstance(concept_scores_from_ai, dict):
+        concept_scores_from_ai = {}
 
     # ---- Build structured analysis_result (stored in DB + returned in response) ----
     analysis_result = {
         "confidence": confidence,
+        "score": weighted_score,
+        "understanding_score": round(understanding_score, 2),
+        "concept_usage_score": round(concept_usage_score, 2),
         "file_name": payload.file_name,
         "edit_count": payload.edit_count,
         "mistakes": [
@@ -208,7 +224,15 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     # Update profiles
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
-    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts, payload.language)
+    update_skill_scores(
+        db,
+        payload.user_id,
+        concepts_detected,
+        error_concepts,
+        payload.language,
+        understanding_score=int(round(understanding_score)),
+        concept_scores=concept_scores_from_ai,
+    )
     
     # Deduct credits
     user.credits -= COST_PER_ANALYSIS
@@ -244,6 +268,10 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         "edit_count": payload.edit_count,
         "analysis_result": analysis_result,
         "confidence": confidence,
+        "score": weighted_score,
+        "understanding_score": round(understanding_score, 2),
+        "concept_usage_score": round(concept_usage_score, 2),
+        "concept_scores": concept_scores_from_ai,
 
         # Profile data
         "profile": get_profile_summary(db, payload.user_id),
