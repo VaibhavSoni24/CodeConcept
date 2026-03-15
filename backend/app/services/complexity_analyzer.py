@@ -90,6 +90,8 @@ def analyze_complexity(code: str) -> Dict[str, Any]:
         "function_count": lizard_metrics.get("function_count", 0),
         "average_function_length": lizard_metrics.get("average_function_length", 0),
         "max_nesting_depth": lizard_metrics.get("max_nesting_depth", loop_depth),
+        "metric_source": lizard_metrics.get("metric_source", "lizard"),
+        "metric_warning": lizard_metrics.get("metric_warning", ""),
         # AST-derived
         "cyclomatic_complexity": cyclomatic,
         "loop_depth": loop_depth,
@@ -129,6 +131,8 @@ def analyze_complexity_for_language(language: str, code: str) -> Dict[str, Any]:
         "function_count": lizard_metrics.get("function_count", 0),
         "average_function_length": lizard_metrics.get("average_function_length", 0),
         "max_nesting_depth": loop_depth,
+        "metric_source": lizard_metrics.get("metric_source", "lizard"),
+        "metric_warning": lizard_metrics.get("metric_warning", ""),
         "cyclomatic_complexity": lizard_metrics.get("cyclomatic_complexity", 1),
         "loop_depth": loop_depth,
         "has_recursion": has_recursion,

@@ -6,6 +6,7 @@ import HintsPanel from "../components/HintsPanel";
 import LearningProgress from "../components/LearningProgress";
 import TabBar from "../components/TabBar";
 import CodeSmellsPanel from "../components/CodeSmellsPanel";
+import VulnerabilityPanel from "../components/VulnerabilityPanel";
 import ComplexityPanel from "../components/ComplexityPanel";
 import ConceptsDetectedPanel from "../components/ConceptsDetectedPanel";
 import ExecutionTracePanel from "../components/ExecutionTracePanel";
@@ -301,6 +302,7 @@ function EditorPage({ user, token, handleLogout, credits, setCredits }) {
           {/* Tab: Code Quality */}
           {activeTab === "quality" && (
             <div className="tab-content slide-down space-y-4">
+              <VulnerabilityPanel vulnerabilities={feedback?.vulnerabilities} meta={feedback?.vulnerability_meta} />
               <CodeSmellsPanel smells={feedback?.code_smells} />
               <ComplexityPanel complexity={feedback?.complexity} />
               <ConceptsDetectedPanel concepts={feedback?.concepts_detected} />

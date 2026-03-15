@@ -6,6 +6,7 @@ from .analyzers.go_analyzer import run_go_analysis
 from .analyzers.rust_analyzer import run_rust_analysis
 from .analyzers.base import get_empty_analysis
 from .complexity_analyzer import analyze_complexity_for_language
+from .vulnerability_analyzer import analyze_vulnerabilities
 
 
 def dispatch_analysis(language: str, code: str):
@@ -30,4 +31,9 @@ def dispatch_analysis(language: str, code: str):
     # override it here so the full metric set (loc, time_complexity, etc.) is
     # always present regardless of which individual analyzer was executed.
     res["complexity"] = analyze_complexity_for_language(language, code)
+
+    vuln = analyze_vulnerabilities(language, code)
+    res["vulnerabilities"] = vuln.get("findings", [])
+    res["vulnerability_meta"] = vuln.get("meta", {"engine": "semgrep", "status": "error", "message": "unknown"})
+
     return res

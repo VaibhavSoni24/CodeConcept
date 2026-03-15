@@ -117,6 +117,11 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         analysis = analysis_data["analysis"]
         misconceptions = analysis_data["misconceptions"]
         code_smells = analysis_data["code_smells"]
+        vulnerabilities = analysis_data.get("vulnerabilities", [])
+        vulnerability_meta = analysis_data.get(
+            "vulnerability_meta",
+            {"engine": "semgrep", "status": "error", "message": "missing_meta"},
+        )
         complexity = analysis_data["complexity"]
         concepts_detected = analysis_data["concepts_detected"]
         flow_graph = analysis_data["flow_graph"]
@@ -167,6 +172,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
             if i.get("mistake_type") != "none"
         ],
         "concepts_detected": concepts_detected,
+        "vulnerabilities": vulnerabilities,
+        "vulnerability_meta": vulnerability_meta,
     }
 
     # Calculate code similarity
@@ -225,6 +232,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         # New analysis data
         "misconceptions": misconceptions,
         "code_smells": code_smells,
+        "vulnerabilities": vulnerabilities,
+        "vulnerability_meta": vulnerability_meta,
         "complexity": complexity,
         "concepts_detected": concepts_detected,
         "flow_graph": flow_graph,
