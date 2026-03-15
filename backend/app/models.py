@@ -12,6 +12,7 @@ class User(Base):
     email = Column(String(120), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=True)
     level = Column(String(50), default="beginner")
+    credits = Column(Integer, default=100)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     submissions = relationship("Submission", back_populates="user", cascade="all, delete")
@@ -28,6 +29,7 @@ class Submission(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     result = Column(Text, nullable=False)
     analysis_result = Column(JSON, nullable=True)
+    complexity = Column(JSON, nullable=True)
 
     user = relationship("User", back_populates="submissions")
     concept_errors = relationship("ConceptError", back_populates="submission", cascade="all, delete")

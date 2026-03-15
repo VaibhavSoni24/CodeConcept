@@ -7,6 +7,8 @@ class SubmitCodeRequest(BaseModel):
     user_id: int = Field(..., gt=0)
     language: str = Field(default="python")
     code: str = Field(..., min_length=1)
+    file_name: Optional[str] = None
+    edit_count: int = Field(default=0, ge=0)
 
 
 class RunCodeRequest(BaseModel):

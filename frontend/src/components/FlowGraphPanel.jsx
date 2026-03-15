@@ -2,12 +2,14 @@ import React from 'react';
 import ReactFlow, { Background, Controls } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-function FlowGraphPanel({ flowGraph }) {
+function FlowGraphPanel({ flowGraph, language }) {
   if (!flowGraph || !flowGraph.nodes || flowGraph.nodes.length === 0) {
     return (
       <div className="card p-6">
         <h3 className="text-lg font-bold mb-4">Control Flow Graph</h3>
-        <p className="text-gray-500">No Control Flow Graph available. Run analysis on Python code first.</p>
+        <p className="text-gray-500">
+          No Control Flow Graph available yet. Click Analyze (Run is only execution), or check parser support for {language || "this language"}.
+        </p>
       </div>
     );
   }

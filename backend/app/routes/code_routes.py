@@ -92,12 +92,8 @@ def format_code(payload: RunCodeRequest, _current_user: User = Depends(get_curre
 
 @router.post("/trace")
 def trace_code(payload: RunCodeRequest, _current_user: User = Depends(get_current_user)):
-    """Return step-by-step execution trace for the given code."""
-    is_python = payload.language.lower() == "python"
-    if not is_python:
-        return {"trace_available": False, "trace": []}
-    
-    trace = run_execution_trace(payload.code)
+    """Return step-by-step execution trace for the given code (all languages)."""
+    trace = run_execution_trace(payload.code, payload.language)
     return {"trace_available": True, "trace": trace}
 
 
@@ -107,6 +103,13 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     if user is None:
         raise HTTPException(status_code=404, detail="User not found. Create user first.")
 
+    COST_PER_ANALYSIS = 5
+    if user.credits < COST_PER_ANALYSIS:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits. Please recharge from the shop."
+        )
+
     # --- Run all analyzers via language dispatcher ---
     try:
         analysis_data = dispatch_analysis(payload.language, payload.code)
@@ -114,6 +117,11 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         analysis = analysis_data["analysis"]
         misconceptions = analysis_data["misconceptions"]
         code_smells = analysis_data["code_smells"]
+        vulnerabilities = analysis_data.get("vulnerabilities", [])
+        vulnerability_meta = analysis_data.get(
+            "vulnerability_meta",
+            {"engine": "semgrep", "status": "error", "message": "missing_meta"},
+        )
         complexity = analysis_data["complexity"]
         concepts_detected = analysis_data["concepts_detected"]
         flow_graph = analysis_data["flow_graph"]
@@ -135,6 +143,41 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Diagnostic generation failed: {str(e)}")
 
+    # ---- Compute confidence score ----
+    # correct concepts = detected concepts that do NOT appear in the error set
+    error_concept_set = set(
+        i.get("concept", "").lower()
+        for i in issues
+        if i.get("mistake_type") != "none"
+    )
+    total_detected = len(concepts_detected)
+    correct_count = sum(
+        1 for c in concepts_detected if c.lower() not in error_concept_set
+    )
+    confidence = correct_count / max(total_detected, 1) if total_detected > 0 else (
+        1.0 if not error_concept_set else 0.0
+    )
+    confidence = round(max(0.0, min(1.0, confidence)), 4)
+
+    # ---- Build structured analysis_result (stored in DB + returned in response) ----
+    analysis_result = {
+        "confidence": confidence,
+        "file_name": payload.file_name,
+        "edit_count": payload.edit_count,
+        "mistakes": [
+            {
+                "concept": i.get("concept", "Unknown"),
+                "severity": i.get("difficulty", "medium"),
+                "explanation": i.get("explanation", ""),
+            }
+            for i in issues
+            if i.get("mistake_type") != "none"
+        ],
+        "concepts_detected": concepts_detected,
+        "vulnerabilities": vulnerabilities,
+        "vulnerability_meta": vulnerability_meta,
+    }
+
     # Calculate code similarity
     from ..services.similarity_service import check_code_similarity
     similarity_score = check_code_similarity(db, user.id, payload.code, payload.language)
@@ -145,6 +188,8 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         code=payload.code,
         language=payload.language,
         result=diagnostic.get("mistake_type", "analysis_completed"),
+        complexity=complexity,
+        analysis_result=analysis_result,
     )
     db.add(submission)
     db.flush()
@@ -163,7 +208,11 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
     # Update profiles
     error_concepts = [i.get("concept", "").lower() for i in issues if i.get("mistake_type") != "none"]
     update_learning_profile(db, payload.user_id, [i for i in issues if i.get("mistake_type") != "none"])
-    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts)
+    update_skill_scores(db, payload.user_id, concepts_detected, error_concepts, payload.language)
+    
+    # Deduct credits
+    user.credits -= COST_PER_ANALYSIS
+    
     db.commit()
 
     # --- Build unified response ---
@@ -185,12 +234,19 @@ def submit_code(payload: SubmitCodeRequest, db: Session = Depends(get_db), _curr
         # New analysis data
         "misconceptions": misconceptions,
         "code_smells": code_smells,
+        "vulnerabilities": vulnerabilities,
+        "vulnerability_meta": vulnerability_meta,
         "complexity": complexity,
         "concepts_detected": concepts_detected,
         "flow_graph": flow_graph,
         "similarity_score": similarity_score,
+        "file_name": payload.file_name,
+        "edit_count": payload.edit_count,
+        "analysis_result": analysis_result,
+        "confidence": confidence,
 
         # Profile data
         "profile": get_profile_summary(db, payload.user_id),
         "skill_scores": get_skill_scores(db, payload.user_id),
+        "remaining_credits": user.credits,
     }

@@ -23,3 +23,11 @@ def profile(user_id: int, db: Session = Depends(get_db), _current_user: User = D
     summary = get_profile_summary(db, user_id)
     skill_scores = get_skill_scores(db, user_id)
     return {"user_id": user_id, "profiles": summary, "skill_scores": skill_scores}
+
+
+@router.get("/users/{user_id}/credits")
+def get_credits(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"credits": user.credits}

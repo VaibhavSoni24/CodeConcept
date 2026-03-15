@@ -1,22 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+} from 'recharts';
 import { BookOpen, GraduationCap, Youtube } from 'lucide-react';
-import { getKnowledgeRecommendations } from '../api';
+import { getKnowledgeRecommendations, getGlobalKnowledgeSummary } from '../api';
 import Loader from '../components/Loader';
 import VideoRecommendations from '../components/VideoRecommendations';
 
-const SUPPORTED_LANGUAGES = ["python", "javascript", "c++", "java", "go", "rust"];
+const SUPPORTED_LANGUAGES = [
+  { key: "python", label: "Python" },
+  { key: "javascript", label: "JavaScript" },
+  { key: "cpp", label: "C++" },
+  { key: "java", label: "Java" },
+  { key: "go", label: "Go" },
+  { key: "rust", label: "Rust" },
+];
+const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444'];
 
 function Knowledge({ user }) {
-  const [knowledgeData, setKnowledgeData] = useState(null);
+  const [userKnowledgeData, setUserKnowledgeData] = useState(null);
+  const [globalKnowledgeData, setGlobalKnowledgeData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('user');
 
   useEffect(() => {
     async function fetchKnowledge() {
       if (!user?.id) return;
       try {
-        const data = await getKnowledgeRecommendations(user.id);
-        setKnowledgeData(data);
+        const [userData, globalData] = await Promise.all([
+          getKnowledgeRecommendations(user.id),
+          getGlobalKnowledgeSummary(),
+        ]);
+        setUserKnowledgeData(userData);
+        setGlobalKnowledgeData(globalData);
       } catch (err) {
         console.error("Failed to fetch knowledge recommendations", err);
       } finally {
@@ -28,8 +60,27 @@ function Knowledge({ user }) {
 
   if (loading) return <Loader />;
 
+  const knowledgeData = viewMode === 'user' ? userKnowledgeData : globalKnowledgeData;
+
   // Destructure with fallbacks
-  const { languages = {}, concepts_learned = [], youtube_recommendations = [] } = knowledgeData || {};
+  const {
+    languages = {},
+    concepts_learned = [],
+    youtube_recommendations = [],
+    language_summary = [],
+    language_activity = [],
+    mastery_distribution = [],
+    global_users = 0,
+  } = knowledgeData || {};
+
+  const activityMap = Object.fromEntries(
+    (language_activity || []).map((item) => [item.language, item.submissions])
+  );
+
+  const topConceptTrend = [...concepts_learned]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10)
+    .map((c, i) => ({ rank: i + 1, concept: c.concept, score: c.score }));
 
   // Empty state guard
   if (!knowledgeData || (Object.keys(languages).length === 0 && concepts_learned.length === 0)) {
@@ -61,7 +112,95 @@ function Knowledge({ user }) {
               Analyze your cross-language skill tree and discover targeted learning tracks.
             </p>
           </div>
+          <div className="flex items-center gap-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg p-1">
+            <button
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'user' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              onClick={() => setViewMode('user')}
+            >
+              User
+            </button>
+            <button
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'global' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+              onClick={() => setViewMode('global')}
+            >
+              Global
+            </button>
+          </div>
         </header>
+
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="card p-5">
+            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">View Mode</p>
+            <p className="text-xl font-bold mt-2">{viewMode === 'user' ? 'User Analytics' : 'Global Analytics'}</p>
+          </div>
+          <div className="card p-5">
+            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Languages Covered</p>
+            <p className="text-xl font-bold mt-2">{Object.keys(languages).length}</p>
+          </div>
+          <div className="card p-5">
+            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Concepts Tracked</p>
+            <p className="text-xl font-bold mt-2">{concepts_learned.length}</p>
+          </div>
+          <div className="card p-5">
+            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Global Users</p>
+            <p className="text-xl font-bold mt-2">{viewMode === 'global' ? global_users : '—'}</p>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="card p-5 h-[360px]">
+            <h3 className="text-lg font-bold mb-4">Language Average Skill</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={language_summary} margin={{ top: 8, right: 16, left: 0, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="language" angle={-20} textAnchor="end" height={50} tick={{ fill: 'var(--text-secondary)' }} />
+                <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-secondary)' }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+                <Bar dataKey="avg_score" fill="var(--accent)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="card p-5 h-[360px]">
+            <h3 className="text-lg font-bold mb-4">Language Activity (Submissions)</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={language_activity} margin={{ top: 8, right: 16, left: 0, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="language" angle={-20} textAnchor="end" height={50} tick={{ fill: 'var(--text-secondary)' }} />
+                <YAxis tick={{ fill: 'var(--text-secondary)' }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+                <Bar dataKey="submissions" fill="#06b6d4" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="card p-5 h-[360px]">
+            <h3 className="text-lg font-bold mb-4">Mastery Distribution</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={mastery_distribution} dataKey="value" nameKey="name" outerRadius={110} label>
+                  {mastery_distribution.map((entry, index) => (
+                    <Cell key={`cell-${entry.name}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="card p-5 h-[360px]">
+            <h3 className="text-lg font-bold mb-4">Top Concept Trend</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={topConceptTrend} margin={{ top: 8, right: 16, left: 0, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="rank" tick={{ fill: 'var(--text-secondary)' }} />
+                <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-secondary)' }} />
+                <Tooltip formatter={(value, _name, item) => [`${value}%`, item?.payload?.concept || 'Concept']} contentStyle={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }} />
+                <Line type="monotone" dataKey="score" stroke="#22c55e" strokeWidth={3} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
         {/* SECTION 1: Language Skill Graphs */}
         <section className="space-y-6">
@@ -70,17 +209,18 @@ function Knowledge({ user }) {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {SUPPORTED_LANGUAGES.map((lang) => {
-              const langData = languages[lang]?.concept_scores || [];
+              const langData = languages[lang.key]?.concept_scores || [];
               const hasData = langData.length > 0;
+              const submissionCount = activityMap[lang.key] || 0;
               
               return (
-                <div key={lang} className="card p-6 flex flex-col h-[380px]">
+                <div key={lang.key} className="card p-6 flex flex-col h-[380px]">
                   <h3 className="text-lg font-bold text-[var(--text-primary)] capitalize mb-4 text-center">
-                    {lang}
+                    {lang.label}
                   </h3>
                   <div className="flex-1 flex items-center justify-center w-full">
                     {hasData ? (
-                      <ResponsiveContainer w="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%">
                         <RadarChart cx="50%" cy="50%" outerRadius="70%" data={langData}>
                           <PolarGrid stroke="var(--border)" />
                           <PolarAngleAxis 
@@ -99,7 +239,9 @@ function Knowledge({ user }) {
                       </ResponsiveContainer>
                     ) : (
                       <div className="text-[var(--text-muted)] italic text-sm text-center">
-                        No code evaluated in {lang} yet.
+                        {submissionCount > 0
+                          ? `Submissions: ${submissionCount}. No skill vectors yet for ${lang.label}.`
+                          : `No code evaluated in ${lang.label} yet.`}
                       </div>
                     )}
                   </div>
@@ -166,63 +308,17 @@ function Knowledge({ user }) {
           </div>
         </section>
 
-        {/* SECTION 3: YouTube Recommendation Engine */}
-        <section className="space-y-6">
-          <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
-            <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-               <Youtube className="text-red-500" size={24} />
-               Recommended Learning Videos
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-            {youtube_recommendations.map((vid, idx) => {
-              const isSearchLink = !vid.video_id;
-              return (
-                <a
-                  key={idx}
-                  href={vid.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="card overflow-hidden group hover:-translate-y-1 transition-transform duration-200 block"
-                >
-                  <div className="relative aspect-video bg-gradient-to-br from-gray-900 to-gray-800 border-b border-[var(--border)] flex items-center justify-center">
-                    {!isSearchLink ? (
-                      <>
-                        <img
-                          src={vid.thumbnail}
-                          alt={vid.title}
-                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity absolute inset-0"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-colors">
-                          <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-4 h-4 ml-0.5"><path d="M8 5v14l11-7z"/></svg>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-2 p-2 text-center">
-                        <div className="w-8 h-8 bg-red-600/80 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-4 h-4"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                        </div>
-                        <span className="text-[0.6rem] text-gray-400">Search YouTube</span>
-                      </div>
-                    )}
-                    <div className="absolute top-1 right-1 bg-indigo-600/90 text-white text-[0.55rem] uppercase font-bold px-1.5 py-0.5 rounded">
-                      {vid.concept}
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <h4 className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-tight mb-1 group-hover:text-indigo-400 transition-colors">
-                      {vid.title}
-                    </h4>
-                    <span className="text-[0.65rem] text-[var(--text-secondary)]">{vid.channel}</span>
-                  </div>
-                </a>
-              );
-            })}
-          </div>
-        </section>
+        {viewMode === 'user' && (
+          <section className="space-y-6">
+            <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2">
+              <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <Youtube className="text-red-500" size={24} />
+                Recommended Learning Videos
+              </h2>
+            </div>
+            <VideoRecommendations videos={youtube_recommendations} />
+          </section>
+        )}
         
       </div>
     </div>

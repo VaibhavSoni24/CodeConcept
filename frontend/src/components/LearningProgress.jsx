@@ -17,12 +17,12 @@ function LearningProgress({ profiles }) {
 
   const getStatusClass = (level) => {
     switch (level) {
-      case "struggling":
-        return "status-struggling";
-      case "beginner":
-        return "status-beginner";
+      case "strong":
+        return "status-improving"; // reuse green-ish style
       case "improving":
         return "status-improving";
+      case "beginner":
+        return "status-beginner";
       default:
         return "status-beginner";
     }
@@ -30,27 +30,33 @@ function LearningProgress({ profiles }) {
 
   const getFillClass = (level) => {
     switch (level) {
-      case "struggling":
-        return "fill-struggling";
-      case "beginner":
-        return "fill-beginner";
+      case "strong":
+        return "fill-improving"; // green
       case "improving":
-        return "fill-improving";
+        return "fill-beginner"; // amber
+      case "beginner":
+        return "fill-struggling"; // red/dim
       default:
         return "fill-beginner";
     }
   };
 
-  const getBarWidth = (level, count) => {
-    switch (level) {
-      case "struggling":
-        return Math.min(30 + count * 5, 95);
-      case "beginner":
-        return Math.min(45 + count * 3, 80);
+  // Use the real score (0-100) as the bar width percentage.
+  // Falls back to a mastery-based estimate for legacy data without a score field.
+  const getBarWidth = (item) => {
+    if (typeof item.score === "number") {
+      return Math.max(4, item.score); // at least 4% so bar is always visible
+    }
+    // Legacy fallback
+    switch (item.mastery_level) {
+      case "strong":
+        return 90;
       case "improving":
-        return Math.max(10, 30 - count * 3);
+        return 60;
+      case "beginner":
+        return 25;
       default:
-        return 50;
+        return 25;
     }
   };
 
@@ -81,11 +87,15 @@ function LearningProgress({ profiles }) {
               <div
                 className={`progress-bar-fill ${getFillClass(item.mastery_level)}`}
                 style={{
-                  width: `${getBarWidth(item.mastery_level, item.mistake_count)}%`,
+                  width: `${getBarWidth(item)}%`,
+                  transition: "width 0.5s ease",
                 }}
               />
             </div>
             <span className="progress-detail">
+              {typeof item.score === "number"
+                ? `${item.score}% mastery · `
+                : ""}
               {item.mistake_count} mistake{item.mistake_count !== 1 ? "s" : ""} recorded
             </span>
           </div>

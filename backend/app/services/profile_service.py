@@ -6,15 +6,34 @@ from sqlalchemy.orm import Session
 from ..models import LearningProfile, ConceptSkill
 
 
-def _mastery_from_mistakes(mistake_count: int) -> str:
-    if mistake_count >= 6:
-        return "struggling"
-    if mistake_count >= 3:
-        return "beginner"
-    return "improving"
+def _mastery_from_score(score: int) -> str:
+    """Classify mastery level from a 0–100 skill score.
+    
+    Thresholds (as per spec):
+      score >= 80  → 'strong'
+      score 50–79  → 'improving'
+      score < 50   → 'beginner'
+    """
+    if score >= 80:
+        return "strong"
+    if score >= 50:
+        return "improving"
+    return "beginner"
+
+
+def _canonical_language(language: str) -> str:
+    lang = (language or "python").lower().strip()
+    if lang in {"js", "node"}:
+        return "javascript"
+    if lang in {"c++", "cxx", "cc"}:
+        return "cpp"
+    if lang in {"rs"}:
+        return "rust"
+    return lang
 
 
 def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, Any]]):
+    """Record mistakes in LearningProfile. Mastery will be set by update_skill_scores."""
     for issue in issues:
         concept = issue.get("concept", "General Python fundamentals")
         profile = (
@@ -24,27 +43,46 @@ def update_learning_profile(db: Session, user_id: int, issues: List[Dict[str, An
         )
 
         if profile is None:
-            profile = LearningProfile(user_id=user_id, concept=concept, mistake_count=1)
-            profile.mastery_level = _mastery_from_mistakes(profile.mistake_count)
+            profile = LearningProfile(
+                user_id=user_id,
+                concept=concept,
+                mistake_count=1,
+                mastery_level="beginner",
+            )
             profile.last_seen = datetime.utcnow()
             db.add(profile)
         else:
             profile.mistake_count += 1
-            profile.mastery_level = _mastery_from_mistakes(profile.mistake_count)
             profile.last_seen = datetime.utcnow()
+            # mastery_level is updated in sync by update_skill_scores
 
 
 def get_profile_summary(db: Session, user_id: int):
+    """Return learning profiles, enriched with the numeric score from ConceptSkill."""
     profiles = db.query(LearningProfile).filter(LearningProfile.user_id == user_id).all()
-    return [
-        {
-            "concept": profile.concept,
-            "mistake_count": profile.mistake_count,
-            "mastery_level": profile.mastery_level,
-            "last_seen": profile.last_seen.isoformat(),
-        }
-        for profile in profiles
-    ]
+
+    # Build a lookup: concept → score from ConceptSkill
+    skill_rows = db.query(ConceptSkill).filter(ConceptSkill.user_id == user_id).all()
+    skill_score_map: Dict[str, int] = {}
+    for s in skill_rows:
+        key = s.concept.lower()
+        # Keep the highest score across languages for simplicity
+        if key not in skill_score_map or s.score > skill_score_map[key]:
+            skill_score_map[key] = s.score
+
+    result = []
+    for profile in profiles:
+        score = skill_score_map.get(profile.concept.lower(), 0)
+        result.append(
+            {
+                "concept": profile.concept,
+                "mistake_count": profile.mistake_count,
+                "mastery_level": profile.mastery_level,
+                "score": score,
+                "last_seen": profile.last_seen.isoformat(),
+            }
+        )
+    return result
 
 
 # ---------- Skill Graph Scoring ----------
@@ -54,18 +92,21 @@ def update_skill_scores(
     user_id: int,
     concepts_detected: List[str],
     error_concepts: List[str],
-    language: str = "python"
+    language: str = "python",
 ):
-    """Update concept skill scores. Concepts without errors get correct_usage++."""
-    error_set = set(error_concepts)
+    """Update concept skill scores. Concepts without errors get correct_usage++.
+    Also syncs mastery_level on LearningProfile rows using the score-based classifier.
+    """
+    error_set = set(c.lower() for c in error_concepts)
+    canonical_language = _canonical_language(language)
 
     for concept in concepts_detected:
         skill = (
             db.query(ConceptSkill)
             .filter(
-                ConceptSkill.user_id == user_id, 
+                ConceptSkill.user_id == user_id,
                 ConceptSkill.concept == concept,
-                ConceptSkill.language == language
+                ConceptSkill.language == canonical_language,
             )
             .first()
         )
@@ -73,7 +114,7 @@ def update_skill_scores(
             skill = ConceptSkill(
                 user_id=user_id,
                 concept=concept,
-                language=language,
+                language=canonical_language,
                 correct_usage=0,
                 total_usage=0,
                 score=0,
@@ -81,15 +122,24 @@ def update_skill_scores(
             db.add(skill)
 
         skill.total_usage += 1
-        if concept not in error_set:
+        if concept.lower() not in error_set:
             skill.correct_usage += 1
 
         skill.score = int((skill.correct_usage / max(skill.total_usage, 1)) * 100)
         skill.last_updated = datetime.utcnow()
 
+        # Sync mastery level onto LearningProfile row (if it exists)
+        profile = (
+            db.query(LearningProfile)
+            .filter(LearningProfile.user_id == user_id, LearningProfile.concept == concept)
+            .first()
+        )
+        if profile is not None:
+            profile.mastery_level = _mastery_from_score(skill.score)
+
 
 def get_skill_scores(db: Session, user_id: int) -> List[Dict[str, Any]]:
-    """Return all skill scores for a user."""
+    """Return all skill scores for a user, including mastery level."""
     skills = db.query(ConceptSkill).filter(ConceptSkill.user_id == user_id).all()
     return [
         {
@@ -98,6 +148,7 @@ def get_skill_scores(db: Session, user_id: int) -> List[Dict[str, Any]]:
             "correct_usage": s.correct_usage,
             "total_usage": s.total_usage,
             "score": s.score,
+            "mastery_level": _mastery_from_score(s.score),
         }
         for s in skills
     ]

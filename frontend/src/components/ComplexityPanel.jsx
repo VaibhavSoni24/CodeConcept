@@ -5,7 +5,7 @@ function ComplexityPanel({ complexity }) {
         <div className="card-header">
           <h2>
             <span className="card-icon cyan">📐</span>
-            Complexity
+            Code Complexity
           </h2>
         </div>
         <p className="feedback-empty">Submit code to see complexity metrics.</p>
@@ -19,24 +19,56 @@ function ComplexityPanel({ complexity }) {
     return "var(--green)";
   };
 
+  const getTimeColor = (val) => {
+    if (!val) return "var(--green)";
+    if (val.includes("n²") || val.includes("n^2")) return "var(--amber)";
+    if (val.includes("n³") || val.includes("n^3") || val.includes("2^n")) return "var(--red)";
+    if (val === "O(1)" || val.includes("log")) return "var(--green)";
+    return "var(--green)";
+  };
+
   const metrics = [
     {
+      label: "Time Complexity",
+      value: complexity.time_complexity || "O(1)",
+      icon: "⏱️",
+      color: getTimeColor(complexity.time_complexity),
+    },
+    {
+      label: "Space Complexity",
+      value: complexity.space_complexity || "O(1)",
+      icon: "💾",
+      color: getTimeColor(complexity.space_complexity),
+    },
+    {
       label: "Cyclomatic Complexity",
-      value: complexity.cyclomatic_complexity,
+      value: complexity.cyclomatic_complexity ?? "—",
       icon: "🔄",
-      color: getColor(complexity.cyclomatic_complexity, [5, 10]),
+      color: getColor(complexity.cyclomatic_complexity ?? 0, [5, 10]),
     },
     {
       label: "Loop Depth",
-      value: complexity.loop_depth,
+      value: complexity.loop_depth ?? "—",
       icon: "🔁",
-      color: getColor(complexity.loop_depth, [2, 4]),
+      color: getColor(complexity.loop_depth ?? 0, [2, 4]),
+    },
+    {
+      label: "LOC",
+      value: complexity.loc ?? "—",
+      icon: "📝",
+      color: getColor(complexity.loc ?? 0, [100, 300]),
+    },
+    {
+      label: "Functions",
+      value: complexity.function_count ?? "—",
+      icon: "🔧",
+      color: "var(--cyan)",
     },
     {
       label: "Branch Count",
-      value: complexity.branch_count,
+      value: complexity.branch_count ?? "—",
       icon: "🌿",
-      color: getColor(complexity.branch_count, [4, 8]),
+      color: getColor(complexity.branch_count ?? 0, [4, 8]),
     },
     {
       label: "Recursion",
@@ -51,7 +83,7 @@ function ComplexityPanel({ complexity }) {
       <div className="card-header">
         <h2>
           <span className="card-icon cyan">📐</span>
-          Complexity
+          Code Complexity
         </h2>
       </div>
       <div className="metrics-grid">
